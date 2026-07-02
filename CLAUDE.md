@@ -12,8 +12,16 @@ PlotPilot (墨枢) is an open-source **narrative engine kernel** for long-form A
 # Backend — start API server (port 8005)
 uvicorn interfaces.main:app --host 127.0.0.1 --port 8005 --reload
 
-# CLI entry point
+# CLI entry point (HTTP server only — daemon is separate, see below)
 python cli.py serve --reload
+
+# Engine daemon (production writing pipeline) — single production entry point
+python scripts/start_daemon.py
+# Toggle to legacy writing path if needed:
+#   PLOTPILOT_USE_STORY_PIPELINE=off python scripts/start_daemon.py
+
+# Database initialization (creates data/plotpilot.db, runs migrations)
+python scripts/setup/init_database.py
 
 # Frontend — dev server (port 3000, proxies /api → 8005)
 # `predev` hook auto-runs scripts/sync-builtin-taxonomy.mjs first
@@ -29,9 +37,20 @@ cd frontend && npm run tauri:build
 # Tests — all
 pytest tests/ -v
 
-# Tests — unit / integration only
+# Tests — unit / integration / dag / e2e (split by tree)
 pytest tests/unit -v
 pytest tests/integration -v
+pytest tests/dag -v
+pytest tests/e2e -v
+
+# Tests — by marker (see pytest.ini: unit, integration, slow, asyncio)
+pytest tests/ -m unit -v
+pytest tests/ -m integration -v
+pytest tests/ -m "not slow" -v
+
+# Single test (file::class::test or by -k substring)
+pytest tests/unit/domain/test_chapter.py::TestChapter::test_summary_extraction -v
+pytest tests/ -k "tension_score" -v
 
 # Tests with coverage
 pytest tests/ --cov=. --cov-report=term-missing
@@ -41,7 +60,9 @@ pip install -r requirements.txt           # core (lightweight)
 pip install -r requirements-local.txt     # + local embedding models
 ```
 
-## Architecture: DDD Four-Layer
+## Architecture
+
+PlotPilot is **DDD four layers + a separate engine kernel**. The four DDD layers (`domain/`, `application/`, `infrastructure/`, `interfaces/`) hold the stable business model and its HTTP/external surface; the top-level `engine/` package is an *independent runtime kernel* — the production writing pipeline — kept decoupled so that ecosystem extensions (vertical tools, editor plugins, custom pipelines) plug in without polluting the domain core. Detailed diagram in `docs/ARCHITECTURE.md`.
 
 ```
 domain/           # Domain layer — zero external deps, pure business logic
@@ -65,9 +86,10 @@ application/      # Application layer — use-case orchestration
   world/          # Bible management, knowledge graph construction
   audit/          # Chapter review, macro restructuring, cliché scanner
   analyst/        # Style analysis, tension analysis, drift detection
-  workflows/      # Post-chapter pipeline orchestration
+  workflows/      # Post-chapter pipeline orchestration (auto-generation, beat extraction)
   novel/          # Novel/chapter CRUD services
-  narrative_engine/  # Story pipeline (10-step BaseStoryPipeline)
+  onboarding/     # New-book wizard and prerequisite setup
+  narrative_engine/  # Story pipeline (10-step BaseStoryPipeline) + BFF read surface
   narrative/      # Narrative-domain application services (shared by engines)
   manuscript/     # Manuscript-level read/write operations (chapter body, revisions)
   evolution/      # Evolution Engine — state-change tracking & gate validation
@@ -81,24 +103,62 @@ application/      # Application layer — use-case orchestration
   reader/         # Reader-facing read models
   workbench/      # Workbench-specific aggregation (frontend BFF helpers)
   ai/             # AI orchestration helpers (prompt assembly, retries)
+  ai_invocation/  # AI call logging and review
   core/           # Cross-cutting application primitives
   services/       # Misc application services
   dtos/           # Cross-layer DTOs
+
+engine/           # Engine kernel — independent production runtime (NOT inside application/)
+  runtime/        # EngineDaemon, StoryPipelineRunner, writing/audit/macro delegates, quality guardrails
+  pipeline/       # BaseStoryPipeline — 10-step chapter generation pipeline (steps, beat contracts, prose composer, recovery)
+  pipelines/      # Themed pipeline registry & extensions (wuxia, generic) → registered via example adapters
+  core/           # Engine-side entities, ports, services, value objects (hexagonal ports for the runtime)
+  infrastructure/ # Engine-internal events, memory orchestration, checkpoint adapters
+  application/    # Engine-side use cases: writing orchestrator, plot state machine, quality guardrails
+  examples/       # Reference themed pipelines (short_drama, wuxia) showing how to register a new genre
 
 infrastructure/   # Infrastructure layer — replaceable tech implementations
   ai/             # LLM clients, ChromaDB/Qdrant vector store, embedding services
     providers/    # anthropic_provider, openai_provider, gemini_provider, mock_provider
     prompt_packages/  # YAML-overridable prompt packs (20+ injection points)
     prompts/      # Raw prompt templates
-  persistence/    # SQLite repositories, Write Dispatch (single-writer router)
+  persistence/    # SQLite repositories, Write Dispatch (single-writer router), mappers
   json_stream/    # Streaming JSON parsing utilities
+  export/         # DOCX / EPUB / PDF export
+  runtime/        # Data directory, log environment, process-level runtime config
+  engine/         # Engine-side infra adapters
 
 interfaces/       # Interface layer — external boundaries
+  main.py         # FastAPI app entrypoint
+  daemon_manager.py   # Backend-side auto-pilot process manager
+  runtime.py      # Runtime state container (DI wiring)
   api/v1/         # Versioned REST API (FastAPI), split by subdomain:
     core/ engine/ world/ blueprint/ audit/ analyst/ prop/ reader/ workbench/ meta/
     anti_ai.py    # Anti-AI-detection endpoints
     system.py     # System / health endpoints
+
+shared/           # Cross-end taxonomy & classification resources (not part of DDD layers)
+config/           # Runtime YAML — generation_profiles, policy_packs, performance, genre_packs
+scripts/          # Operational scripts (start_daemon, init_database, migrations, evaluation)
+docs/             # ARCHITECTURE.md, BUILD_INSTALLER.md, embedding download guide, screenshots
 ```
+
+### Five-subsystem mental model
+
+When reasoning about runtime behavior, think in terms of five cooperating subsystems rather than folder names:
+
+1. **Narrative State Machine** — Story Bible, chapter-summary chain, event stream, storyline DAG, foreshadowing registry. The persistent "memory" fed into each generation.
+2. **Vector Retrieval Layer** — Two parallel indexes: chapter content (ChromaDB / Qdrant) and `(subject, relation, object)` knowledge triples (structured + semantic hybrid).
+3. **Engine Runtime** — `engine/runtime/engine_daemon.py` → `EngineDaemon` → `StoryPipelineRunner`, driving the 10-step `BaseStoryPipeline`. Single production entry: `scripts/start_daemon.py`.
+4. **Prompt Strategy Layer** — 20+ independent injection points; each is YAML-overridable via `infrastructure/ai/prompt_packages/`. Switch task type (短篇 / 长篇 / 游戏剧本) by switching prompt-pack dirs, no code change.
+5. **Quality Monitor** — Per-chapter tension score (0–10), style-similarity drift, cliché scanner; drift triggers *targeted rewrite* rather than rollback.
+
+### Two entry points to know
+
+- **`python cli.py serve --reload`** → FastAPI HTTP server only. The engine daemon is started *separately* (auto-launched by FastAPI unless `DISABLE_AUTO_DAEMON=1`).
+- **`python scripts/start_daemon.py`** → builds the dependency graph and starts `EngineDaemon` directly. Use this when iterating on the runtime itself, running headless generation, or isolating daemon behavior from the API.
+
+To temporarily disable the default `StoryPipeline` writing path (e.g., fall back to legacy chapter writing): `PLOTPILOT_USE_STORY_PIPELINE=off`.
 
 ## Engine Subsystems
 
@@ -136,3 +196,14 @@ Copy `.env.example` to `.env` and configure at minimum one LLM key (`ANTHROPIC_A
 - Vector store: `data/chromadb/`
 - App logs: `logs/plotpilot.log`
 - `.env` is gitignored; never commit secrets
+
+## Commit safety boundary (from README)
+
+Do **not** commit any of the following — both for repo hygiene and to avoid leaking private content:
+
+- `.env`, API keys, private endpoints in `.env`
+- `data/`, `logs/`, SQLite DB, vector store, runtime caches
+- Office documents (`.docx`, `.pptx`, `.xlsx`) — especially unpublished setting drafts, business plans, contracts, customer material
+- Build artifacts, installer bundles, Tauri / PyInstaller output
+
+If you need to commit example material, scrub it to desensitized Markdown / JSON / YAML and confirm it contains no real keys, real user data, or unpublished creative content. Logging configuration: see `README_LOGGING.md`.
