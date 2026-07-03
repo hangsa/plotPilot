@@ -5,7 +5,7 @@ It is intentionally written OUTSIDE the bridge transaction so that even when the
 transaction ROLLBACKs, the failure metadata survives for forensic analysis.
 
 Per CONVENTIONS.md: this table is the documented audit-only exception that does
-NOT inherit BaseRegistrySchema — it has its own compact 12-column layout with
+NOT inherit BaseRegistrySchema — it has its own compact 11-column layout with
 no shared registry fields. The 9 mixin columns (status / description /
 linked_assets / cascade_updated_at / created_chapter) are not meaningful for
 a write-once audit record.
