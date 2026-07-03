@@ -37,6 +37,17 @@ def test_reveal_round_trip_revealed():
     assert r2 == r
 
 
+def test_reveal_uses_revealed_chapter_for_created():
+    """Reveal 实体无 created_chapter；mapper 应回退到 revealed_in_chapter。"""
+    r = Reveal(
+        id="r1", novel_id="n1", content="x",
+        status=AssetStatus.REVEALED, related_mystery="m1",
+        revealed_in_chapter=10,
+    )
+    row = RevealMapper.to_orm(r)
+    assert row.created_chapter == 10
+
+
 def test_expectation_round_trip():
     e = Expectation(
         id="e1", novel_id="n1", description="protagonist finds treasure",
