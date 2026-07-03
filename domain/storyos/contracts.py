@@ -53,3 +53,28 @@ class CascadeTrigger(str, Enum):
     PROMISE_FULFILLED = "promise_fulfilled"
     CONFLICT_RESOLVED = "conflict_resolved"
     CONFLICT_ESCALATED = "conflict_escalated"
+
+
+FORBIDDEN_TRANSITIONS: frozenset[tuple[AssetStatus, AssetStatus]] = frozenset({
+    (AssetStatus.RESOLVED, AssetStatus.ACTIVE),
+    (AssetStatus.FULFILLED, AssetStatus.ACTIVE),
+    (AssetStatus.REVEALED, AssetStatus.HIDDEN),
+    (AssetStatus.DEAD, AssetStatus.ACTIVE),
+    (AssetStatus.ABANDONED, AssetStatus.PLANTED),
+    (AssetStatus.ABANDONED, AssetStatus.DEVELOPING),
+    (AssetStatus.RESOLVED, AssetStatus.PLANTED),
+    (AssetStatus.FULFILLED, AssetStatus.PLANTED),
+})
+
+
+def is_forbidden_transition(src: AssetStatus, dst: AssetStatus) -> bool:
+    """检查 src→dst 是否在 FORBIDDEN_TRANSITIONS 中。
+
+    Raises:
+        TypeError: src 或 dst 不是 AssetStatus 实例。
+    """
+    if not isinstance(src, AssetStatus):
+        raise TypeError(f"src must be AssetStatus, got {type(src).__name__}")
+    if not isinstance(dst, AssetStatus):
+        raise TypeError(f"dst must be AssetStatus, got {type(dst).__name__}")
+    return (src, dst) in FORBIDDEN_TRANSITIONS
