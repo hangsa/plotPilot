@@ -5,7 +5,15 @@ from datetime import datetime
 from typing import Any, Optional
 
 from sqlalchemy import JSON, DateTime, Integer, String, func
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+
+
+class Base(DeclarativeBase):
+    """Concrete declarative base for all StoryOS schemas.
+
+    Subclasses must combine BaseRegistrySchema + Base to get both the shared
+    fields and the declarative machinery.
+    """
 
 
 class BaseRegistrySchema:
