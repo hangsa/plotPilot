@@ -4,6 +4,7 @@ SQLite 单机多写竞争者全部经 mp.Queue → 单一消费者线程顺序�
 from __future__ import annotations
 
 import contextlib
+import functools
 import logging
 import re
 import threading
@@ -207,6 +208,14 @@ class WriteTransaction:
             return
         for op in self._ops:
             op(executor)
+
+    def queue_apply(self, fn, *args, **kwargs) -> None:
+        """入队 fn(conn, *args, **kwargs)。
+
+        参数立即绑定（用 functools.partial）→ 闭包陷阱修复。
+        1B 的 EvolutionBridgeService 用此 API 包装 evolution_apply_actions / registry_apply_with_cascade / sflog_event_record 三个 op。
+        """
+        self._ops.append(functools.partial(fn, *args, **kwargs))
 
 
 class WriteDispatch:
