@@ -50,3 +50,19 @@
 - 暴露 `to_domain(row) -> Entity` 与 `to_orm(entity) -> Row` 双向方法
 - 双向转换**对称**（测试覆盖）
 - 旧→新状态映射（如 Foreshadowing）由 mapper 的 `convert_old_status_to_new` 静态方法提供
+
+## Schema 类继承模式
+
+- 每个 schema 必须 **同时** 继承 `BaseRegistrySchema` 和共享的 `Base`（声明自 `infrastructure/persistence/storyos/schemas/base.py`）
+
+```python
+from infrastructure.persistence.storyos.schemas.base import Base, BaseRegistrySchema
+
+class MysterySchema(BaseRegistrySchema, Base):
+    __tablename__ = "storyos_mystery_v1"
+    clues: Mapped[list[dict]] = mapped_column(JSON, default=list)
+```
+
+- **不要**直接继承 `DeclarativeBase` —— SQLAlchemy 2.0 禁止把 `DeclarativeBase` 自身作为多重基类使用，会抛 `InvalidRequestError`
+- `BaseRegistrySchema` 是 **mixin**（提供 9 个共用字段），不带 `__tablename__`
+- `Base` 是 **共享 declarative 基类**（所有 11 张 storyos 表共用同一 registry）
