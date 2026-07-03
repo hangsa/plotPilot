@@ -42,3 +42,14 @@ RELATIONAL_LOG_TYPES = frozenset(
         SFLogType.CHARACTER_RELATION_CHANGE,
     }
 )
+
+
+class CascadeTrigger(str, Enum):
+    """级联触发的语义分类（spec §3.2 锁定 6 类）。"""
+
+    MYSTERY_REVEALED = "mystery_revealed"
+    TWIST_REVEALED = "twist_revealed"
+    REVEAL_REVEALED = "reveal_revealed"
+    PROMISE_FULFILLED = "promise_fulfilled"
+    CONFLICT_RESOLVED = "conflict_resolved"
+    CONFLICT_ESCALATED = "conflict_escalated"
