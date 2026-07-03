@@ -66,3 +66,5 @@ class MysterySchema(BaseRegistrySchema, Base):
 - **不要**直接继承 `DeclarativeBase` —— SQLAlchemy 2.0 禁止把 `DeclarativeBase` 自身作为多重基类使用，会抛 `InvalidRequestError`
 - `BaseRegistrySchema` 是 **mixin**（提供 9 个共用字段），不带 `__tablename__`
 - `Base` 是 **共享 declarative 基类**（所有 11 张 storyos 表共用同一 registry）
+
+> **特例**：审计类表（如 `bridge_log`）若不携带 registry 字段，可直接继承 `Base` 而不混入 `BaseRegistrySchema`，避免空字段污染。

@@ -14,6 +14,7 @@ def test_conflict_round_trip():
         id="c1", novel_id="n1", description="x",
         intensity=ConflictIntensity.MEDIUM, status=AssetStatus.ACTIVE,
         involved_characters=("a", "b"), created_chapter=1,
+        linked_conflicts=("c2", "c3"),
     )
     row = ConflictMapper.to_orm(c)
     c2 = ConflictMapper.to_domain(row)
@@ -53,3 +54,18 @@ def test_promise_round_trip():
     row = PromiseMapper.to_orm(p)
     p2 = PromiseMapper.to_domain(row)
     assert p2 == p
+
+
+def test_promise_round_trip_fulfilled():
+    # E1 review: explicitly exercise fulfilled_in_chapter so a silent-drop
+    # bug in the ORM <-> mapper direction would be caught (entity default = None).
+    p = Promise(
+        id="p2", novel_id="n1", description="y",
+        made_in_chapter=1, status=AssetStatus.FULFILLED, importance=90,
+        fulfilled_in_chapter=5,
+    )
+    row = PromiseMapper.to_orm(p)
+    p2 = PromiseMapper.to_domain(row)
+    assert p2 == p
+    assert p2.status == AssetStatus.FULFILLED
+    assert p2.fulfilled_in_chapter == 5
