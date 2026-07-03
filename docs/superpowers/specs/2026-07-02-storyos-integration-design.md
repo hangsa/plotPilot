@@ -107,7 +107,8 @@ domain/storyos/
   value_objects/
     sf_log.py                           # SFLogRecord, SFLogParam
     cascade.py                          # CascadeTrigger (6) + CascadeStep + CascadeResult + CascadeRules
-    predeclared.py                      # PredeclaredChange (asset_id|asset_pair) + PredeclaredChanges + MatchReport
+    predeclared.py                      # PredeclaredChange (asset_id|asset_pair) + PredeclaredChanges
+    match_report.py                     # MatchReport (spec §4.4 两级重试)
     format_error.py                     # FormatError
   entities/
     conflict.py                         # Conflict + ConflictIntensity
@@ -256,6 +257,7 @@ class BridgeResult:
     success: bool
     warnings: list[str]
     duration_ms: int = 0
+    error: str | None = None  # Phase 1B 实施时追加（spec 扩展：失败时记录错误信息）
 ```
 
 ### 3.3 SF_LOG → Evolution 映射（6 映射 + 5 跳过）
