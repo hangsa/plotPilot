@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from enum import Enum
+from typing import Protocol, runtime_checkable
 
 
 class AssetStatus(str, Enum):
@@ -78,3 +79,15 @@ def is_forbidden_transition(src: AssetStatus, dst: AssetStatus) -> bool:
     if not isinstance(dst, AssetStatus):
         raise TypeError(f"dst must be AssetStatus, got {type(dst).__name__}")
     return (src, dst) in FORBIDDEN_TRANSITIONS
+
+
+@runtime_checkable
+class RegistryAsset(Protocol):
+    """所有 narrative asset 实体的 duck-typing 协议。
+
+    任何实现需提供 id / status / linked_assets 三个属性。
+    """
+
+    id: str
+    status: AssetStatus
+    linked_assets: dict[str, str]
