@@ -185,3 +185,18 @@ def enqueue_delete_chapter(chapter_db_id: str) -> bool:
         PersistenceCommandType.DELETE_CHAPTER.value,
         {"chapter_db_id": chapter_db_id},
     )
+
+
+class WriteTransaction:
+    """单事务内多 op 容器（spec §3.5 锁定）。
+
+    1A 阶段：仅作为数据载体，事务派发由 WriteDispatch.transaction()（D2）负责。
+    1B 阶段：EvolutionBridgeService 会 queue_apply() 三个 op 提交到这里。
+    """
+
+    def __init__(self) -> None:
+        self._ops: list = []
+
+    def queue(self, op) -> None:
+        """向后兼容的 op 入队（与 WriteDispatch.queue 同形）。"""
+        self._ops.append(op)
