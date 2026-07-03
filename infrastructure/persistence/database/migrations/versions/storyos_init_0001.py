@@ -85,7 +85,8 @@ def _create_conflict(conn: sqlite3.Connection) -> None:
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             intensity TEXT NOT NULL,
-            involved_characters TEXT NOT NULL DEFAULT '[]'
+            involved_characters TEXT NOT NULL DEFAULT '[]',
+            linked_conflicts TEXT NOT NULL DEFAULT '[]'
         )
         """
     )
