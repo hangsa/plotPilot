@@ -200,3 +200,42 @@ class WriteTransaction:
     def queue(self, op) -> None:
         """向后兼容的 op 入队（与 WriteDispatch.queue 同形）。"""
         self._ops.append(op)
+
+    def run(self, executor) -> None:
+        """由 WriteDispatch.transaction() 提交时调用（1A 简化版：直接遍历 _ops）。"""
+        if not self._ops:
+            return
+        for op in self._ops:
+            op(executor)
+
+
+class WriteDispatch:
+    """单写者路由门面（spec §3.5 锁定）。
+
+    1A 阶段：transaction() 返回 WriteTransaction 上下文管理器。
+    退出 with 块时：正常退出 → enqueue_txn_batch(_ops)；异常退出 → 丢弃 ops（回滚语义）。
+    """
+
+    @contextlib.contextmanager
+    def transaction(self):
+        """返回 WriteTransaction 上下文；退出 with 块时提交/回滚。
+
+        Yields:
+            WriteTransaction: 容器，调用方 queue(op) 累积操作。
+
+        On normal exit:
+            enqueue_txn_batch(_ops) is called with all queued ops.
+
+        On exception:
+            _ops are discarded; enqueue_txn_batch is NOT called.
+        """
+        txn = WriteTransaction()
+        try:
+            yield txn
+        except BaseException:
+            # 回滚：丢弃 _ops，不派发
+            raise
+        else:
+            # 提交：派发 _ops 到 writer 线程
+            if txn._ops:
+                enqueue_txn_batch(txn._ops)
