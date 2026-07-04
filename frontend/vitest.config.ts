@@ -23,7 +23,6 @@ export default defineConfig({
     alias: [
       { find: 'vue-i18n', replacement: i18nStubPath },
       // Lazy-imported StoryOS views — alias to a placeholder SFC.
-      { find: '@/views/workbench/storyos/RegistryList.vue', replacement: stubSfcPath },
       { find: '@/views/workbench/storyos/CascadeGraph.vue', replacement: stubSfcPath },
       { find: '@/views/workbench/storyos/SFLogInspector.vue', replacement: stubSfcPath },
       { find: '@/views/workbench/storyos/PredeclaredDiff.vue', replacement: stubSfcPath },
