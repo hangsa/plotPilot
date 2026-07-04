@@ -10,12 +10,19 @@ from application.storyos.services.expectation_registry_service import Expectatio
 class CascadeService:
     def __init__(
         self,
-        conflict_svc: ConflictRegistryService | None = None,
-        expectation_svc: ExpectationRegistryService | None = None,
+        conflict_svc=None, mystery_svc=None, twist_svc=None,
+        promise_svc=None, reveal_svc=None, expectation_svc=None,
+        goal_svc=None, foreshadowing_svc=None,
         max_depth: int = 3,
-    ) -> None:
+    ):
         self.conflict_svc = conflict_svc
+        self.mystery_svc = mystery_svc
+        self.twist_svc = twist_svc
+        self.promise_svc = promise_svc
+        self.reveal_svc = reveal_svc
         self.expectation_svc = expectation_svc
+        self.goal_svc = goal_svc
+        self.foreshadowing_svc = foreshadowing_svc
         self.max_depth = max_depth
         self._rules = CascadeRules()
 
@@ -37,13 +44,29 @@ class CascadeService:
         return result.model_copy(update={"max_depth_reached": len(visited)})
 
     def _apply_step(self, step: CascadeStep) -> None:
-        if step.intensity_delta is not None and self.expectation_svc is not None:
+        # 按 target_asset_type 分发
+        target_svc = self._get_service(step.target_asset_type)
+        if target_svc is None:
+            return
+        if step.intensity_delta is not None and step.target_asset_type == "expectation":
             try:
-                self.expectation_svc.intensify(step.target_asset_id, step.intensity_delta)
-            except KeyError:
+                target_svc.intensify(step.target_asset_id, step.intensity_delta)
+            except (KeyError, AttributeError):
                 pass
-        if step.new_status is not None and self.conflict_svc is not None:
+        elif step.new_status is not None:
             try:
-                self.conflict_svc.update(step.target_asset_id, status=step.new_status)
-            except KeyError:
+                target_svc.update(step.target_asset_id, status=step.new_status)
+            except (KeyError, AttributeError):
                 pass
+
+    def _get_service(self, asset_type: str):
+        return {
+            "conflict": self.conflict_svc,
+            "mystery": self.mystery_svc,
+            "twist": self.twist_svc,
+            "promise": self.promise_svc,
+            "reveal": self.reveal_svc,
+            "expectation": self.expectation_svc,
+            "goal": self.goal_svc,
+            "foreshadowing": self.foreshadowing_svc,
+        }.get(asset_type)
