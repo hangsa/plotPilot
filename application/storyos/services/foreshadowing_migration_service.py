@@ -111,7 +111,104 @@ class ForeshadowingMigrationService:
         dry_run: bool = False,
     ) -> MigrationExecuteResult:
         """执行迁移。"""
-        raise NotImplementedError("Phase 1E Task B2")
+        if batch_size <= 0:
+            raise ValueError("batch_size must be positive")
+
+        # 1. 拉取旧表全量 + 过滤已 committed
+        records, adapter_invalid_ids = self._legacy.fetch_all_with_invalid(project_id)
+        committed_ids = self._log_repo.get_committed_old_ids(project_id)
+
+        # 2. 状态映射 + 跳过 unknown status
+        migratable_pairs, status_invalid_ids = StatusMapper.map_with_skip(records)
+        migratable_pairs = [
+            (r, s) for r, s in migratable_pairs if r.id not in committed_ids
+        ]
+
+        if dry_run:
+            return MigrationExecuteResult(
+                migration_id="dry-run",
+                status="dry_run",
+                batches_total=(len(migratable_pairs) + batch_size - 1) // batch_size,
+                batches_done=0,
+                records_migrated=0,
+                errors=[],
+            )
+
+        # 3. 分批执行
+        migration_id = f"mig-{uuid.uuid4().hex[:12]}"
+        batches_total = (len(migratable_pairs) + batch_size - 1) // batch_size
+        batches_done = 0
+        successful_batch_sizes: List[int] = []
+        errors: List[str] = []
+        started_at = datetime.utcnow().isoformat()
+
+        for batch_idx in range(batches_total):
+            batch_start = batch_idx * batch_size
+            batch_end = batch_start + batch_size
+            batch = migratable_pairs[batch_start:batch_end]
+            batch_id = f"batch-{batch_idx:04d}"
+            old_ids = [r.id for r, _ in batch]
+
+            try:
+                self._new_writer.insert_batch(
+                    [r for r, _ in batch],
+                    [s for _, s in batch],
+                )
+                completed_at = datetime.utcnow().isoformat()
+                self._log_repo.record_committed_batch(
+                    migration_id=migration_id,
+                    project_id=project_id,
+                    batch_id=batch_id,
+                    old_ids=old_ids,
+                    started_at=started_at,
+                    completed_at=completed_at,
+                )
+                batches_done += 1
+                successful_batch_sizes.append(len(batch))
+            except Exception as e:
+                error_msg = f"batch {batch_id} failed: {e}"
+                logger.warning("[migration] %s", error_msg)
+                errors.append(error_msg)
+                self._log_repo.record_failed_batch(
+                    migration_id=migration_id,
+                    project_id=project_id,
+                    batch_id=batch_id,
+                    old_ids=old_ids,
+                    started_at=started_at,
+                    error=str(e),
+                )
+
+        # 4. 计算最终状态
+        if batches_done == batches_total:
+            status = "completed"
+        elif batches_done == 0:
+            status = "failed"
+        else:
+            status = "partial"
+
+        records_migrated = sum(successful_batch_sizes)
+
+        if self._audit is not None:
+            try:
+                self._audit.record_migration(
+                    migration_id=migration_id,
+                    project_id=project_id,
+                    batches_total=batches_total,
+                    batches_done=batches_done,
+                    records_migrated=records_migrated,
+                    errors=errors,
+                )
+            except Exception as e:
+                logger.warning("[migration] audit record 失败: %s", e)
+
+        return MigrationExecuteResult(
+            migration_id=migration_id,
+            status=status,
+            batches_total=batches_total,
+            batches_done=batches_done,
+            records_migrated=records_migrated,
+            errors=errors,
+        )
 
     def rollback(self, migration_id: str) -> RollbackResult:
         """回滚单条迁移批次。"""

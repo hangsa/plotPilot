@@ -8,6 +8,22 @@ from application.storyos.migration.legacy_foreshadowing_adapter import (
 )
 
 
+def _make_service(records, committed_ids=None, adapter_invalid=None):
+    adapter = MagicMock()
+    adapter.fetch_all_with_invalid.return_value = (
+        records,
+        adapter_invalid or [],
+    )
+    log_repo = MagicMock()
+    log_repo.get_committed_old_ids.return_value = committed_ids or set()
+    new_writer = MagicMock()
+    return ForeshadowingMigrationService(
+        legacy_adapter=adapter,
+        log_repository=log_repo,
+        new_table_writer=new_writer,
+    ), adapter, log_repo, new_writer
+
+
 def _fake_records():
     return [
         LegacyForeshadowingRecord(
@@ -88,3 +104,96 @@ def test_scan_does_not_modify_database():
     # log_repository 不能被 scan 调用任何写方法
     log_repo.record_committed_batch.assert_not_called()
     log_repo.record_failed_batch.assert_not_called()
+
+
+"""ForeshadowingMigrationService.execute() 单元测试。"""
+
+
+def test_execute_happy_path_single_batch():
+    """execute 单一批次 < 500：直接迁移 + record committed。"""
+    records = _fake_records()  # 10 条
+    service, _, log_repo, new_writer = _make_service(records)
+    result = service.execute("novel-1", batch_size=500)
+    assert result.batches_total == 1
+    assert result.batches_done == 1
+    assert result.records_migrated == 10
+    assert result.status == "completed"
+    new_writer.insert_batch.assert_called_once()
+    log_repo.record_committed_batch.assert_called_once()
+
+
+def test_execute_multiple_batches():
+    """execute batch_size=3 → 10 条 → 4 batches（3+3+3+1）。"""
+    records = _fake_records()
+    service, _, _, new_writer = _make_service(records)
+    result = service.execute("novel-1", batch_size=3)
+    assert result.batches_total == 4
+    assert result.batches_done == 4
+    assert result.records_migrated == 10
+    assert new_writer.insert_batch.call_count == 4
+
+
+def test_execute_skips_already_committed_ids():
+    """断点续跑：已 committed 的 old_ids 跳过（不入 batch）。"""
+    records = _fake_records()  # 10 条
+    committed = {"fs-1", "fs-2", "fs-3"}
+    service, _, log_repo, new_writer = _make_service(records, committed_ids=committed)
+    result = service.execute("novel-1", batch_size=500)
+    assert result.records_migrated == 7  # 10 - 3 already migrated
+    new_writer.insert_batch.assert_called_once()
+    inserted_batch = new_writer.insert_batch.call_args.args[0]
+    inserted_ids = [r.id for r in inserted_batch]
+    assert "fs-1" not in inserted_ids
+
+
+def test_execute_dry_run_does_not_write():
+    """dry_run=True：不调用 new_writer.insert_batch + 不写 migration_log。"""
+    records = _fake_records()
+    service, _, log_repo, new_writer = _make_service(records)
+    result = service.execute("novel-1", batch_size=500, dry_run=True)
+    assert result.status == "dry_run"
+    new_writer.insert_batch.assert_not_called()
+    log_repo.record_committed_batch.assert_not_called()
+
+
+def test_execute_handles_invalid_status_gracefully():
+    """未知 status 的记录跳过（不入 batch）但不抛异常。"""
+    records = _fake_records()
+    records.append(LegacyForeshadowingRecord(
+        id="fs-bad", novel_id="n1", description="d",
+        planted_chapter=1, due_chapter=None, resolved_chapter=None,
+        status="legacy_weird", importance=2, subtext_type=None,
+    ))
+    service, _, _, new_writer = _make_service(records)
+    result = service.execute("novel-1", batch_size=500)
+    assert result.records_migrated == 10
+    inserted_batch = new_writer.insert_batch.call_args.args[0]
+    assert all(r.id != "fs-bad" for r in inserted_batch)
+
+
+def test_execute_records_failed_batch_on_writer_exception():
+    """writer 抛异常时调用 log_repo.record_failed_batch（不中断整个 migration）。"""
+    records = _fake_records()
+    service, _, log_repo, new_writer = _make_service(records)
+    new_writer.insert_batch.side_effect = RuntimeError("SQL constraint failed")
+    result = service.execute("novel-1", batch_size=3)
+    # 4 个批次全部失败，但 service 不抛异常
+    assert result.status == "failed"
+    assert "SQL constraint" in str(result.errors)
+    assert log_repo.record_failed_batch.call_count == 4
+
+
+def test_execute_returns_partial_status_on_some_failed_batches():
+    """部分批次失败时返回 partial 状态。"""
+    records = _fake_records()
+    service, _, _, new_writer = _make_service(records)
+    # 第 2 个 batch 失败
+    new_writer.insert_batch.side_effect = [
+        None,  # batch 1 OK
+        RuntimeError("batch 2 fail"),
+        None,  # batch 3 OK
+        None,  # batch 4 OK
+    ]
+    result = service.execute("novel-1", batch_size=3)
+    assert result.status == "partial"
+    assert result.batches_done == 3  # 4 中 3 成功
