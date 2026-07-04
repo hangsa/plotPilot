@@ -779,9 +779,9 @@ async def get_foreshadowing_service() -> ForeshadowingAPIAdapter:
     return _get_foreshadowing_adapter()
 
 
-# Group C (C1-C4) will replace these stubs.
+# Group C: cascade handler stubs (C1 1D) — real CascadeService wiring is 1E.
 async def get_cascade_service() -> None:
-    _not_implemented("get_cascade_service")
+    return None
 
 
 async def get_sflog_service() -> None:
