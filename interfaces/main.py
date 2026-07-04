@@ -217,9 +217,14 @@ def create_app(app_settings: BackendSettings | None = None) -> FastAPI:
     )
 
     from interfaces.api.middleware.error_handler import add_error_handlers
+    from interfaces.api.v1.storyos.error_handlers import register_error_handlers
+    from interfaces.api.v1.storyos.router_registry import build_storyos_router
 
     add_error_handlers(created)
     register_api_routes(created)
+
+    created.include_router(build_storyos_router())
+    register_error_handlers(created)
 
     @created.middleware("http")
     async def fix_redirect_host(request, call_next):
