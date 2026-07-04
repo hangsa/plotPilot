@@ -7,6 +7,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from domain.storyos.contracts import AssetStatus
 from domain.storyos.entities.promise import Promise
+from interfaces.api.v1.storyos.schemas.common_schemas import PaginationMeta
 
 
 class PromiseCreateRequest(BaseModel):
@@ -57,3 +58,11 @@ class PromiseResponse(BaseModel):
             importance=entity.importance,
             fulfilled_in_chapter=entity.fulfilled_in_chapter,
         )
+
+
+class PromiseListResponse(BaseModel):
+    """GET /promises list response."""
+
+    model_config = ConfigDict(extra="forbid")
+    data: list[PromiseResponse]
+    meta: PaginationMeta

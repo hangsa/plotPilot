@@ -7,6 +7,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from domain.storyos.contracts import AssetStatus
 from domain.storyos.entities.expectation import Expectation
+from interfaces.api.v1.storyos.schemas.common_schemas import PaginationMeta
 
 
 class ExpectationCreateRequest(BaseModel):
@@ -53,3 +54,11 @@ class ExpectationResponse(BaseModel):
             created_chapter=entity.created_chapter,
             intensity=entity.intensity,
         )
+
+
+class ExpectationListResponse(BaseModel):
+    """GET /expectations list response."""
+
+    model_config = ConfigDict(extra="forbid")
+    data: list[ExpectationResponse]
+    meta: PaginationMeta

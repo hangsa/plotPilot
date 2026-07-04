@@ -7,6 +7,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from domain.storyos.contracts import AssetStatus
 from domain.storyos.entities.mystery import Clue, ClueCategory, Mystery
+from interfaces.api.v1.storyos.schemas.common_schemas import PaginationMeta
 
 
 class ClueCreateRequest(BaseModel):
@@ -98,3 +99,19 @@ class MysteryResponse(BaseModel):
             related_mystery=entity.related_mystery,
             clues=[ClueResponse.from_domain(c) for c in entity.clues],
         )
+
+
+class ClueListResponse(BaseModel):
+    """GET /clues list response."""
+
+    model_config = ConfigDict(extra="forbid")
+    data: list[ClueResponse]
+    meta: PaginationMeta
+
+
+class MysteryListResponse(BaseModel):
+    """GET /mysteries list response."""
+
+    model_config = ConfigDict(extra="forbid")
+    data: list[MysteryResponse]
+    meta: PaginationMeta

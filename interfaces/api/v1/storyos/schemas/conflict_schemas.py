@@ -7,6 +7,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from domain.storyos.contracts import AssetStatus
 from domain.storyos.entities.conflict import Conflict, ConflictIntensity
+from interfaces.api.v1.storyos.schemas.common_schemas import PaginationMeta
 
 
 class ConflictCreateRequest(BaseModel):
@@ -61,3 +62,11 @@ class ConflictResponse(BaseModel):
             involved_characters=list(entity.involved_characters),
             linked_conflicts=list(entity.linked_conflicts),
         )
+
+
+class ConflictListResponse(BaseModel):
+    """GET /conflicts list response."""
+
+    model_config = ConfigDict(extra="forbid")
+    data: list[ConflictResponse]
+    meta: PaginationMeta

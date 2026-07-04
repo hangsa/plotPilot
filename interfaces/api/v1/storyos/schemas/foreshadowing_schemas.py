@@ -8,6 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from domain.storyos.contracts import AssetStatus
 from domain.novel.value_objects.foreshadowing import ImportanceLevel
 from domain.storyos.entities.foreshadowing import Foreshadowing
+from interfaces.api.v1.storyos.schemas.common_schemas import PaginationMeta
 
 
 class ForeshadowingCreateRequest(BaseModel):
@@ -62,3 +63,11 @@ class ForeshadowingResponse(BaseModel):
             suggested_resolve_chapter=entity.suggested_resolve_chapter,
             resolved_in_chapter=entity.resolved_in_chapter,
         )
+
+
+class ForeshadowingListResponse(BaseModel):
+    """GET /foreshadowings list response."""
+
+    model_config = ConfigDict(extra="forbid")
+    data: list[ForeshadowingResponse]
+    meta: PaginationMeta

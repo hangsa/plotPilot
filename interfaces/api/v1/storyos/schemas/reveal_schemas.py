@@ -7,6 +7,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from domain.storyos.contracts import AssetStatus
 from domain.storyos.entities.reveal import Reveal
+from interfaces.api.v1.storyos.schemas.common_schemas import PaginationMeta
 
 
 class RevealCreateRequest(BaseModel):
@@ -58,3 +59,11 @@ class RevealResponse(BaseModel):
             linked_to_conflict=entity.linked_to_conflict,
             revealed_in_chapter=entity.revealed_in_chapter,
         )
+
+
+class RevealListResponse(BaseModel):
+    """GET /reveals list response."""
+
+    model_config = ConfigDict(extra="forbid")
+    data: list[RevealResponse]
+    meta: PaginationMeta

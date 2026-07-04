@@ -7,6 +7,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from domain.storyos.contracts import AssetStatus
 from domain.storyos.entities.twist import Twist, TwistType
+from interfaces.api.v1.storyos.schemas.common_schemas import PaginationMeta
 
 
 class TwistCreateRequest(BaseModel):
@@ -61,3 +62,11 @@ class TwistResponse(BaseModel):
             reveal_trigger=entity.reveal_trigger,
             forbidden_concurrent_twists=list(entity.forbidden_concurrent_twists),
         )
+
+
+class TwistListResponse(BaseModel):
+    """GET /twists list response."""
+
+    model_config = ConfigDict(extra="forbid")
+    data: list[TwistResponse]
+    meta: PaginationMeta

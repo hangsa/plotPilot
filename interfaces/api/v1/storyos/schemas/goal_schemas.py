@@ -7,6 +7,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from domain.storyos.contracts import AssetStatus
 from domain.storyos.entities.goal import Goal, ProgressMarker
+from interfaces.api.v1.storyos.schemas.common_schemas import PaginationMeta
 
 
 class GoalCreateRequest(BaseModel):
@@ -53,3 +54,11 @@ class GoalResponse(BaseModel):
             created_chapter=entity.created_chapter,
             current_progress=entity.current_progress,
         )
+
+
+class GoalListResponse(BaseModel):
+    """GET /goals list response."""
+
+    model_config = ConfigDict(extra="forbid")
+    data: list[GoalResponse]
+    meta: PaginationMeta
