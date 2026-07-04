@@ -2,13 +2,18 @@
 from __future__ import annotations
 
 import pytest
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from interfaces.main import app
+from interfaces.api.v1.storyos.error_handlers import register_error_handlers
+from interfaces.api.v1.storyos.router_registry import build_storyos_router
 
 
 @pytest.fixture
 def client():
+    app = FastAPI()
+    register_error_handlers(app)
+    app.include_router(build_storyos_router())
     return TestClient(app)
 
 
