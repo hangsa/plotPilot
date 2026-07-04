@@ -785,7 +785,8 @@ async def get_cascade_service() -> None:
 
 
 async def get_sflog_service() -> None:
-    _not_implemented("get_sflog_service")
+    """C2 1D stub: real SFLogParserService wiring lands in 1E."""
+    return None
 
 
 async def get_migration_service() -> None:
