@@ -197,3 +197,125 @@ def test_execute_returns_partial_status_on_some_failed_batches():
     result = service.execute("novel-1", batch_size=3)
     assert result.status == "partial"
     assert result.batches_done == 3  # 4 中 3 成功
+
+
+"""ForeshadowingMigrationService.rollback() 单元测试。"""
+
+
+def test_rollback_deletes_new_records_and_marks_log():
+    """rollback 删除新表数据 + 把 migration_log 标记为 rolled_back。"""
+    from infrastructure.persistence.storyos.migration_log_mapper import (
+        MigrationLogEntry, MigrationStatus,
+    )
+    entry = MigrationLogEntry(
+        id="ml-1", project_id="n1", migration_type="foreshadowing_v1",
+        batch_id="batch-0001", old_ids=["fs-1", "fs-2", "fs-3"],
+        status=MigrationStatus.COMMITTED,
+        started_at="2026-07-03T10:00:00", completed_at="2026-07-03T10:00:05",
+        error=None,
+    )
+    log_repo = MagicMock()
+    log_repo.get_entry.return_value = entry
+    new_writer = MagicMock()
+    new_writer.delete_by_migrated_ids.return_value = 3
+
+    service = ForeshadowingMigrationService(
+        legacy_adapter=MagicMock(),
+        log_repository=log_repo,
+        new_table_writer=new_writer,
+    )
+    result = service.rollback("ml-1")
+
+    assert result.records_deleted == 3
+    assert result.status == "rolled_back"
+    new_writer.delete_by_migrated_ids.assert_called_once_with(["fs-1", "fs-2", "fs-3"])
+    log_repo.mark_rolled_back.assert_called_once_with("ml-1")
+
+
+def test_rollback_returns_not_found_when_log_missing():
+    """migration_id 不存在时返回 not_found，不抛异常。"""
+    log_repo = MagicMock()
+    log_repo.get_entry.return_value = None
+    new_writer = MagicMock()
+
+    service = ForeshadowingMigrationService(
+        legacy_adapter=MagicMock(),
+        log_repository=log_repo,
+        new_table_writer=new_writer,
+    )
+    result = service.rollback("ml-nonexistent")
+    assert result.status == "not_found"
+    assert result.records_deleted == 0
+    new_writer.delete_by_migrated_ids.assert_not_called()
+
+
+def test_rollback_returns_already_when_already_rolled_back():
+    """已 rolled_back 的批次不能再次 rollback。"""
+    from infrastructure.persistence.storyos.migration_log_mapper import (
+        MigrationLogEntry, MigrationStatus,
+    )
+    entry = MigrationLogEntry(
+        id="ml-1", project_id="n1", migration_type="foreshadowing_v1",
+        batch_id="batch-0001", old_ids=["fs-1"],
+        status=MigrationStatus.ROLLED_BACK,
+        started_at="2026-07-03T10:00:00", completed_at=None, error=None,
+    )
+    log_repo = MagicMock()
+    log_repo.get_entry.return_value = entry
+
+    service = ForeshadowingMigrationService(
+        legacy_adapter=MagicMock(),
+        log_repository=log_repo,
+        new_table_writer=MagicMock(),
+    )
+    result = service.rollback("ml-1")
+    assert result.status == "already_rolled_back"
+
+
+def test_rollback_returns_failed_status_when_already_failed():
+    """失败批次不能 rollback（没有 committed 数据可回滚）。"""
+    from infrastructure.persistence.storyos.migration_log_mapper import (
+        MigrationLogEntry, MigrationStatus,
+    )
+    entry = MigrationLogEntry(
+        id="ml-1", project_id="n1", migration_type="foreshadowing_v1",
+        batch_id="batch-0001", old_ids=["fs-1"],
+        status=MigrationStatus.FAILED,
+        started_at="2026-07-03T10:00:00", completed_at=None, error="...",
+    )
+    log_repo = MagicMock()
+    log_repo.get_entry.return_value = entry
+
+    service = ForeshadowingMigrationService(
+        legacy_adapter=MagicMock(),
+        log_repository=log_repo,
+        new_table_writer=MagicMock(),
+    )
+    result = service.rollback("ml-1")
+    assert result.status == "not_committed"
+
+
+def test_rollback_does_not_modify_legacy_table():
+    """rollback 永远不删除旧表数据（spec Q8 锁定）。"""
+    from infrastructure.persistence.storyos.migration_log_mapper import (
+        MigrationLogEntry, MigrationStatus,
+    )
+    entry = MigrationLogEntry(
+        id="ml-1", project_id="n1", migration_type="foreshadowing_v1",
+        batch_id="batch-0001", old_ids=["fs-1"],
+        status=MigrationStatus.COMMITTED,
+        started_at="2026-07-03T10:00:00", completed_at="2026-07-03T10:00:05",
+        error=None,
+    )
+    legacy = MagicMock()
+    log_repo = MagicMock()
+    log_repo.get_entry.return_value = entry
+    new_writer = MagicMock()
+
+    service = ForeshadowingMigrationService(
+        legacy_adapter=legacy, log_repository=log_repo, new_table_writer=new_writer,
+    )
+    service.rollback("ml-1")
+    # 严禁访问 legacy adapter
+    legacy.fetch_all_with_invalid.assert_not_called()
+    legacy.count_for_novel.assert_not_called()

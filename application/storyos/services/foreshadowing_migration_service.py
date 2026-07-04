@@ -211,5 +211,33 @@ class ForeshadowingMigrationService:
         )
 
     def rollback(self, migration_id: str) -> RollbackResult:
-        """回滚单条迁移批次。"""
-        raise NotImplementedError("Phase 1E Task B3")
+        """回滚单条迁移批次（只删新表，旧表不动，spec Q8）。"""
+        entry = self._log_repo.get_entry(migration_id)
+        if entry is None:
+            return RollbackResult(
+                migration_id=migration_id, records_deleted=0, status="not_found",
+            )
+
+        if entry.status.value == "rolled_back":
+            return RollbackResult(
+                migration_id=migration_id, records_deleted=0,
+                status="already_rolled_back",
+            )
+
+        if entry.status.value != "committed":
+            return RollbackResult(
+                migration_id=migration_id, records_deleted=0,
+                status="not_committed",
+            )
+
+        # 1. 删除新表数据（不走旧表）
+        deleted = self._new_writer.delete_by_migrated_ids(entry.old_ids)
+
+        # 2. 更新 migration_log 状态
+        self._log_repo.mark_rolled_back(migration_id)
+
+        return RollbackResult(
+            migration_id=migration_id,
+            records_deleted=deleted,
+            status="rolled_back",
+        )
