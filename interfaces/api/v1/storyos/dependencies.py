@@ -8,6 +8,12 @@ from uuid import uuid4
 from application.storyos.services.conflict_registry_service import (
     ConflictRegistryService,
 )
+from application.storyos.services.expectation_registry_service import (
+    ExpectationRegistryService,
+)
+from application.storyos.services.foreshadowing_registry_service import (
+    ForeshadowingRegistryService,
+)
 from application.storyos.services.goal_registry_service import GoalRegistryService
 from application.storyos.services.mystery_registry_service import (
     MysteryRegistryService,
@@ -16,10 +22,20 @@ from application.storyos.services.promise_registry_service import (
     PromiseRegistryService,
 )
 from application.storyos.services.registry_service import GenericRegistryService
+from application.storyos.services.reveal_registry_service import (
+    RevealRegistryService,
+)
+from application.storyos.services.twist_registry_service import (
+    TwistRegistryService,
+)
 from domain.storyos.entities.conflict import Conflict, ConflictIntensity
+from domain.storyos.entities.expectation import Expectation
+from domain.storyos.entities.foreshadowing import Foreshadowing
 from domain.storyos.entities.goal import Goal, ProgressMarker
 from domain.storyos.entities.mystery import Mystery
 from domain.storyos.entities.promise import Promise
+from domain.storyos.entities.reveal import Reveal
+from domain.storyos.entities.twist import Twist
 
 TCreate = TypeVar("TCreate")
 TUpdate = TypeVar("TUpdate")
@@ -329,6 +345,251 @@ class GoalAPIAdapter(_BaseAPIAdapter[Goal, object, object]):
         self._svc.delete(asset_id)
 
 
+class TwistAPIAdapter(_BaseAPIAdapter[Twist, object, object]):
+    """Adapter wrapping ``TwistRegistryService`` for the CRUD factory."""
+
+    async def list(
+        self,
+        project_id: str,
+        status: Optional[str] = None,
+        page: int = 1,
+        page_size: int = 20,
+    ) -> tuple[list[Twist], int]:
+        items = [t for t in self._scope() if t.novel_id == project_id]
+        if status:
+            items = [t for t in items if t.status.value == status]
+        total = len(items)
+        start = (page - 1) * page_size
+        return items[start:start + page_size], total
+
+    async def get(self, project_id: str, asset_id: str) -> Optional[Twist]:
+        try:
+            entity = self._svc.get(asset_id)
+        except KeyError:
+            return None
+        if entity.novel_id != project_id:
+            return None
+        return entity
+
+    async def create(self, project_id: str, data) -> Twist:
+        forbidden = tuple(data.forbidden_concurrent_twists or ())
+        entity = Twist(
+            id=str(uuid4()),
+            novel_id=project_id,
+            description=data.description,
+            status=data.status,
+            created_chapter=data.created_chapter,
+            twist_type=data.twist_type,
+            reveal_trigger=data.reveal_trigger,
+            forbidden_concurrent_twists=forbidden,
+        )
+        return self._svc.create(entity)
+
+    async def update(self, project_id: str, asset_id: str, data) -> Optional[Twist]:
+        try:
+            old = self._svc.get(asset_id)
+        except KeyError:
+            return None
+        if old.novel_id != project_id:
+            return None
+        updates = data.model_dump(exclude_unset=True)
+        updates.pop("project_id", None)
+        # forbidden_concurrent_twists arrives as list[str]; coerce to tuple to match
+        # the frozen dataclass field annotation.
+        if "forbidden_concurrent_twists" in updates and updates["forbidden_concurrent_twists"] is not None:
+            updates["forbidden_concurrent_twists"] = tuple(updates["forbidden_concurrent_twists"])
+        new = replace(old, **updates)
+        self._svc.delete(asset_id)
+        self._svc.create(new)
+        return new
+
+    async def delete(self, project_id: str, asset_id: str) -> None:
+        existing = await self.get(project_id, asset_id)
+        if existing is None:
+            return
+        self._svc.delete(asset_id)
+
+
+class RevealAPIAdapter(_BaseAPIAdapter[Reveal, object, object]):
+    """Adapter wrapping ``RevealRegistryService`` for the CRUD factory.
+
+    Reveal entity has NO ``description`` field — the request DTO uses ``content``.
+    """
+
+    async def list(
+        self,
+        project_id: str,
+        status: Optional[str] = None,
+        page: int = 1,
+        page_size: int = 20,
+    ) -> tuple[list[Reveal], int]:
+        items = [r for r in self._scope() if r.novel_id == project_id]
+        if status:
+            items = [r for r in items if r.status.value == status]
+        total = len(items)
+        start = (page - 1) * page_size
+        return items[start:start + page_size], total
+
+    async def get(self, project_id: str, asset_id: str) -> Optional[Reveal]:
+        try:
+            entity = self._svc.get(asset_id)
+        except KeyError:
+            return None
+        if entity.novel_id != project_id:
+            return None
+        return entity
+
+    async def create(self, project_id: str, data) -> Reveal:
+        entity = Reveal(
+            id=str(uuid4()),
+            novel_id=project_id,
+            content=data.content,
+            status=data.status,
+            related_mystery=data.related_mystery,
+            linked_to_conflict=data.linked_to_conflict,
+            revealed_in_chapter=data.revealed_in_chapter,
+        )
+        return self._svc.create(entity)
+
+    async def update(self, project_id: str, asset_id: str, data) -> Optional[Reveal]:
+        try:
+            old = self._svc.get(asset_id)
+        except KeyError:
+            return None
+        if old.novel_id != project_id:
+            return None
+        updates = data.model_dump(exclude_unset=True)
+        updates.pop("project_id", None)
+        new = replace(old, **updates)
+        self._svc.delete(asset_id)
+        self._svc.create(new)
+        return new
+
+    async def delete(self, project_id: str, asset_id: str) -> None:
+        existing = await self.get(project_id, asset_id)
+        if existing is None:
+            return
+        self._svc.delete(asset_id)
+
+
+class ExpectationAPIAdapter(_BaseAPIAdapter[Expectation, object, object]):
+    """Adapter wrapping ``ExpectationRegistryService`` for the CRUD factory."""
+
+    async def list(
+        self,
+        project_id: str,
+        status: Optional[str] = None,
+        page: int = 1,
+        page_size: int = 20,
+    ) -> tuple[list[Expectation], int]:
+        items = [e for e in self._scope() if e.novel_id == project_id]
+        if status:
+            items = [e for e in items if e.status.value == status]
+        total = len(items)
+        start = (page - 1) * page_size
+        return items[start:start + page_size], total
+
+    async def get(self, project_id: str, asset_id: str) -> Optional[Expectation]:
+        try:
+            entity = self._svc.get(asset_id)
+        except KeyError:
+            return None
+        if entity.novel_id != project_id:
+            return None
+        return entity
+
+    async def create(self, project_id: str, data) -> Expectation:
+        entity = Expectation(
+            id=str(uuid4()),
+            novel_id=project_id,
+            description=data.description,
+            status=data.status,
+            created_chapter=data.created_chapter,
+            intensity=data.intensity,
+        )
+        return self._svc.create(entity)
+
+    async def update(self, project_id: str, asset_id: str, data) -> Optional[Expectation]:
+        try:
+            old = self._svc.get(asset_id)
+        except KeyError:
+            return None
+        if old.novel_id != project_id:
+            return None
+        updates = data.model_dump(exclude_unset=True)
+        updates.pop("project_id", None)
+        new = replace(old, **updates)
+        self._svc.delete(asset_id)
+        self._svc.create(new)
+        return new
+
+    async def delete(self, project_id: str, asset_id: str) -> None:
+        existing = await self.get(project_id, asset_id)
+        if existing is None:
+            return
+        self._svc.delete(asset_id)
+
+
+class ForeshadowingAPIAdapter(_BaseAPIAdapter[Foreshadowing, object, object]):
+    """Adapter wrapping ``ForeshadowingRegistryService`` for the CRUD factory."""
+
+    async def list(
+        self,
+        project_id: str,
+        status: Optional[str] = None,
+        page: int = 1,
+        page_size: int = 20,
+    ) -> tuple[list[Foreshadowing], int]:
+        items = [f for f in self._scope() if f.novel_id == project_id]
+        if status:
+            items = [f for f in items if f.status.value == status]
+        total = len(items)
+        start = (page - 1) * page_size
+        return items[start:start + page_size], total
+
+    async def get(self, project_id: str, asset_id: str) -> Optional[Foreshadowing]:
+        try:
+            entity = self._svc.get(asset_id)
+        except KeyError:
+            return None
+        if entity.novel_id != project_id:
+            return None
+        return entity
+
+    async def create(self, project_id: str, data) -> Foreshadowing:
+        entity = Foreshadowing(
+            id=str(uuid4()),
+            novel_id=project_id,
+            description=data.description,
+            importance=data.importance,
+            status=data.status,
+            planted_in_chapter=data.planted_in_chapter,
+            suggested_resolve_chapter=data.suggested_resolve_chapter,
+            resolved_in_chapter=data.resolved_in_chapter,
+        )
+        return self._svc.create(entity)
+
+    async def update(self, project_id: str, asset_id: str, data) -> Optional[Foreshadowing]:
+        try:
+            old = self._svc.get(asset_id)
+        except KeyError:
+            return None
+        if old.novel_id != project_id:
+            return None
+        updates = data.model_dump(exclude_unset=True)
+        updates.pop("project_id", None)
+        new = replace(old, **updates)
+        self._svc.delete(asset_id)
+        self._svc.create(new)
+        return new
+
+    async def delete(self, project_id: str, asset_id: str) -> None:
+        existing = await self.get(project_id, asset_id)
+        if existing is None:
+            return
+        self._svc.delete(asset_id)
+
+
 # Module-level singletons so all requests in a process share the in-memory dict.
 # Tests can reset via the ``reset_*_adapter`` hooks below for isolation.
 
@@ -336,6 +597,10 @@ _conflict_adapter: Optional[ConflictAPIAdapter] = None
 _mystery_adapter: Optional[MysteryAPIAdapter] = None
 _promise_adapter: Optional[PromiseAPIAdapter] = None
 _goal_adapter: Optional[GoalAPIAdapter] = None
+_twist_adapter: Optional[TwistAPIAdapter] = None
+_reveal_adapter: Optional[RevealAPIAdapter] = None
+_expectation_adapter: Optional[ExpectationAPIAdapter] = None
+_foreshadowing_adapter: Optional[ForeshadowingAPIAdapter] = None
 
 
 def _new_conflict_adapter() -> ConflictAPIAdapter:
@@ -352,6 +617,22 @@ def _new_promise_adapter() -> PromiseAPIAdapter:
 
 def _new_goal_adapter() -> GoalAPIAdapter:
     return GoalAPIAdapter(GoalRegistryService())
+
+
+def _new_twist_adapter() -> TwistAPIAdapter:
+    return TwistAPIAdapter(TwistRegistryService())
+
+
+def _new_reveal_adapter() -> RevealAPIAdapter:
+    return RevealAPIAdapter(RevealRegistryService())
+
+
+def _new_expectation_adapter() -> ExpectationAPIAdapter:
+    return ExpectationAPIAdapter(ExpectationRegistryService())
+
+
+def _new_foreshadowing_adapter() -> ForeshadowingAPIAdapter:
+    return ForeshadowingAPIAdapter(ForeshadowingRegistryService())
 
 
 def _get_conflict_adapter() -> ConflictAPIAdapter:
@@ -382,6 +663,34 @@ def _get_goal_adapter() -> GoalAPIAdapter:
     return _goal_adapter
 
 
+def _get_twist_adapter() -> TwistAPIAdapter:
+    global _twist_adapter
+    if _twist_adapter is None:
+        _twist_adapter = _new_twist_adapter()
+    return _twist_adapter
+
+
+def _get_reveal_adapter() -> RevealAPIAdapter:
+    global _reveal_adapter
+    if _reveal_adapter is None:
+        _reveal_adapter = _new_reveal_adapter()
+    return _reveal_adapter
+
+
+def _get_expectation_adapter() -> ExpectationAPIAdapter:
+    global _expectation_adapter
+    if _expectation_adapter is None:
+        _expectation_adapter = _new_expectation_adapter()
+    return _expectation_adapter
+
+
+def _get_foreshadowing_adapter() -> ForeshadowingAPIAdapter:
+    global _foreshadowing_adapter
+    if _foreshadowing_adapter is None:
+        _foreshadowing_adapter = _new_foreshadowing_adapter()
+    return _foreshadowing_adapter
+
+
 def reset_conflict_adapter() -> None:
     """Test hook: clear in-memory state for the conflict registry."""
     global _conflict_adapter
@@ -406,6 +715,30 @@ def reset_goal_adapter() -> None:
     _goal_adapter = None
 
 
+def reset_twist_adapter() -> None:
+    """Test hook: clear in-memory state for the twist registry."""
+    global _twist_adapter
+    _twist_adapter = None
+
+
+def reset_reveal_adapter() -> None:
+    """Test hook: clear in-memory state for the reveal registry."""
+    global _reveal_adapter
+    _reveal_adapter = None
+
+
+def reset_expectation_adapter() -> None:
+    """Test hook: clear in-memory state for the expectation registry."""
+    global _expectation_adapter
+    _expectation_adapter = None
+
+
+def reset_foreshadowing_adapter() -> None:
+    """Test hook: clear in-memory state for the foreshadowing registry."""
+    global _foreshadowing_adapter
+    _foreshadowing_adapter = None
+
+
 async def get_conflict_service() -> ConflictAPIAdapter:
     """B1 DI factory: returns ConflictAPIAdapter singleton."""
     return _get_conflict_adapter()
@@ -426,22 +759,24 @@ async def get_goal_service() -> GoalAPIAdapter:
     return _get_goal_adapter()
 
 
-# Group B (B2) will replace these stubs with real Twist/Reveal/Expectation/Foreshadowing
-# factories that similarly return per-registry adapter singletons.
-async def get_twist_service() -> None:
-    _not_implemented("get_twist_service")
+async def get_twist_service() -> TwistAPIAdapter:
+    """B2 DI factory: returns TwistAPIAdapter singleton."""
+    return _get_twist_adapter()
 
 
-async def get_reveal_service() -> None:
-    _not_implemented("get_reveal_service")
+async def get_reveal_service() -> RevealAPIAdapter:
+    """B2 DI factory: returns RevealAPIAdapter singleton."""
+    return _get_reveal_adapter()
 
 
-async def get_expectation_service() -> None:
-    _not_implemented("get_expectation_service")
+async def get_expectation_service() -> ExpectationAPIAdapter:
+    """B2 DI factory: returns ExpectationAPIAdapter singleton."""
+    return _get_expectation_adapter()
 
 
-async def get_foreshadowing_service() -> None:
-    _not_implemented("get_foreshadowing_service")
+async def get_foreshadowing_service() -> ForeshadowingAPIAdapter:
+    """B2 DI factory: returns ForeshadowingAPIAdapter singleton."""
+    return _get_foreshadowing_adapter()
 
 
 # Group C (C1-C4) will replace these stubs.

@@ -16,7 +16,7 @@ class ForeshadowingCreateRequest(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    project_id: str = Field(min_length=1, max_length=64)
+    project_id: Optional[str] = Field(default=None, min_length=1, max_length=64)
     description: str = Field(min_length=1, max_length=2000)
     planted_in_chapter: int = Field(ge=1)
     status: AssetStatus = AssetStatus.PLANTED

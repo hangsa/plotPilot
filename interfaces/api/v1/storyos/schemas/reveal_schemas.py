@@ -15,7 +15,7 @@ class RevealCreateRequest(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    project_id: str = Field(min_length=1, max_length=64)
+    project_id: Optional[str] = Field(default=None, min_length=1, max_length=64)
     content: str = Field(min_length=1, max_length=2000)
     status: AssetStatus = AssetStatus.HIDDEN
     related_mystery: Optional[str] = None
