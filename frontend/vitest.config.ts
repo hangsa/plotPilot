@@ -22,8 +22,6 @@ export default defineConfig({
   resolve: {
     alias: [
       { find: 'vue-i18n', replacement: i18nStubPath },
-      // Lazy-imported StoryOS views — alias to a placeholder SFC.
-      { find: '@/views/workbench/storyos/PredeclaredDiff.vue', replacement: stubSfcPath },
       // Generic `@/...` alias LAST so the per-path matches above take priority.
       { find: '@', replacement: resolve(__dirname, 'src') },
     ],
