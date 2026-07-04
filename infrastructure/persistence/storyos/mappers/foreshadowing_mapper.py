@@ -35,6 +35,11 @@ class ForeshadowingMapper:
 
     @staticmethod
     def to_orm(f: Foreshadowing) -> ForeshadowingSchema:
+        # Foreshadowing 实体没有 created_chapter 字段，但 BaseRegistrySchema mixin
+        # 要求 created_chapter 非空。这里把 planted_in_chapter 同时写到 mixin 的
+        # created_chapter 和实体专属的 planted_in_chapter —— 同语义双写，to_domain
+        # 只从 created_chapter 读取（planted_in_chapter 在实体上是冗余副本）。
+        # 与 RevealMapper（revealed_in_chapter → created_chapter）的处理方式一致。
         return ForeshadowingSchema(
             id=f.id,
             project_id=f.novel_id,
