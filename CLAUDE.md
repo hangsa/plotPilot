@@ -186,6 +186,21 @@ PlotPilot contains multiple specialized engines, each with a distinct role in th
 - **Engines vs. application services**: The "Engines" in the table above (Evolution, Governance, Memory, Codex, Snapshot) each have their own `application/<name>/` package with a clear public service; treat them as bounded contexts and avoid cross-importing internals.
 - **Frontend** uses `@/` alias for `frontend/src/`; chunk splitting: naive-ui, echarts, vue-runtime, vendor. Vue 3 + TypeScript + Vite + Pinia + Vue Router + Vue Flow (DAG viz) + ECharts. Tauri 2.x for desktop builds.
 
+### StoryOS 工作台
+
+项目接入 StoryForge2 tier_0 机制后，工作台新增 "叙事资产" 入口：
+- 路径：`/book/:slug/storyos`
+- 8 Registry（冲突/谜题/反转/承诺/揭示/预期/目标/伏笔）CRUD
+- CascadeGraph 可视化
+- SFLogInspector 章节 SF_LOG 注释解析
+- PredeclaredDiff 预声明 vs 实际产出对比
+
+1D 里程碑为「前端 + API」；cascade simulate/replay 与 migration 端点为桩实现（501），真实逻辑在 1E 接入。
+
+详细设计见 `docs/superpowers/specs/2026-07-02-storyos-integration-design.md`
+实施计划见 `docs/superpowers/plans/2026-07-02-storyos-phase-1d-frontend-api.md`
+验收清单见 `docs/superpowers/checklists/2026-07-02-storyos-1d-acceptance.md`
+
 ## Environment Variables
 
 Copy `.env.example` to `.env` and configure at minimum one LLM key (`ANTHROPIC_API_KEY` or `ARK_API_KEY`). Key vars: `EMBEDDING_SERVICE` (openai/local), `VECTOR_STORE_TYPE` (chromadb), `LOG_LEVEL`, `LOG_FILE`, `CORS_ORIGINS`, `DISABLE_AUTO_DAEMON`.
