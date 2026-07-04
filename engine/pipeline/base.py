@@ -750,50 +750,23 @@ class BaseStoryPipeline(ABC):
         )
 
         try:
-            # 尝试推持久化队列
+            # 尝试推持久化队列；失败则降级走 repository
             pushed = self._push_persistence_command(ctx)
             if pushed:
                 self._wait_for_chapter_persistence(ctx)
                 if not self._chapter_completed_in_repository(ctx):
                     await self._save_chapter_via_repository(ctx)
-                ctx.chapter_saved = True
                 ctx.save_method = "queue"
-                self._discard_generation_workspace(ctx)
+            else:
+                # 降级：通过 repository 直接写库
+                await self._save_chapter_via_repository(ctx)
+                ctx.save_method = "repository"
 
-                # ─── StoryOS Step 6 钩子：apply-state 走 WriteDispatch 单事务（spec §2.3）───
-                if ctx.chapter_content and ctx.scene_plan is not None:
-                    bridge_result = self._hook_step6_apply_state(
-                        ctx, ctx.chapter_content, ctx.scene_plan.predeclared_changes,
-                    )
-                    if bridge_result is not None:
-                        # 1B BridgeResult 字段（spec §3.2 锁定）：
-                        #   success / cascade_steps_executed / cascade_steps_blocked /
-                        #   evolution_actions_applied / sflog_events_recorded / error / warnings
-                        ctx.metadata["storyos_bridge_success"] = bridge_result.success
-                        ctx.metadata["storyos_cascade_count"] = int(
-                            getattr(bridge_result, "cascade_steps_executed", 0) or 0
-                        )
-                        ctx.metadata["storyos_cascade_blocked"] = len(
-                            getattr(bridge_result, "cascade_steps_blocked", []) or []
-                        )
-                        ctx.metadata["storyos_evolution_actions"] = int(
-                            getattr(bridge_result, "evolution_actions_applied", 0) or 0
-                        )
-                        if not bridge_result.success:
-                            logger.warning(
-                                "[%s] Step 6 bridge 失败: %s",
-                                ctx.novel_id, getattr(bridge_result, "error", ""),
-                            )
-
-                return StepResult.ok()
-
-            # 降级：通过 repository 直接写库
-            await self._save_chapter_via_repository(ctx)
             ctx.chapter_saved = True
-            ctx.save_method = "repository"
             self._discard_generation_workspace(ctx)
 
             # ─── StoryOS Step 6 钩子：apply-state 走 WriteDispatch 单事务（spec §2.3）───
+            # 单一调用点（review-1c C1）：原先 queue/repository 两分支重复，现合并到一处
             if ctx.chapter_content and ctx.scene_plan is not None:
                 bridge_result = self._hook_step6_apply_state(
                     ctx, ctx.chapter_content, ctx.scene_plan.predeclared_changes,
@@ -1068,6 +1041,8 @@ class BaseStoryPipeline(ABC):
             "debt_updated": ctx.debt_updated,
             "validation_score": ctx.validation_score,
             "validation_passed": ctx.validation_passed,
+            # review-1c I1：1D BFF / StoryOSHub 失败面板数据源
+            "storyos_failures": list(getattr(ctx, "storyos_failed", [])),
         }
 
         return StepResult.ok()
