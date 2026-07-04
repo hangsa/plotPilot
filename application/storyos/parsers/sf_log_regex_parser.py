@@ -97,24 +97,18 @@ class SFLogRegexParser:
         """检测 `<!-- SF_LOG ...` 开头但缺少 `-->` 闭合的损坏标签。
 
         主正则要求 `-->` 收尾，因此无法匹配未闭合的标签。我们另外扫一遍
-        起始位置，检查其后的合理窗口（避免与下一个 SF_LOG 的起始混淆），
-        若未找到 `-->`，则视作格式错误。
+        起始位置，排除已经被主正则匹配为合法标签的起始，再在剩余起始的窗口
+        内（窗口限定到下一个 `<!--` 之前，上限 5000 字符）找 `-->`，
+        若未找到，则视作格式错误。
         """
-        # 构造已成功匹配的 SF_LOG 起始集合（这些是合法的，不算 malformed）
         valid_starts = {m.start() for m in _SFLOG_PATTERN.finditer(text)}
 
         for start_match in _SFLOG_START_PATTERN.finditer(text):
             start = start_match.start()
             if start in valid_starts:
-                # 这个起始已经被主正则匹配为合法标签，跳过
-                # 但要确认：需要从 "下一个" 标签的起始处判断
-                # 由于合法标签的 start 也在 valid_starts 中，
-                # 我们对每个 _SFLOG_START_PATTERN 匹配都检查它是否对应
-                # 一个合法完整标签。简单做法：检查 start 之后能否找到 `-->`
+                # 已被主正则识别为合法标签的起始，跳过
                 continue
 
-            # 未被主正则识别为合法起始 → 找 `-->`
-            # 合理窗口：限定到下一个可能的 `<!--` 之前
             next_open = text.find('<!--', start + 1)
             search_end = next_open if next_open != -1 else start + 5000
             window = text[start:search_end]
