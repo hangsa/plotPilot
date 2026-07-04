@@ -1,0 +1,29 @@
+{# sflog_directive.j2 — StoryOS SF_LOG 指令块（spec §3.1 + §3.3）#}
+
+=== StoryOS 状态变更标记（SF_LOG）===
+
+本章如需在 narrative state 中留下资产操作标记，请使用以下 11 类 HTML 注释：
+
+{# 6 类映射（spec §3.3 锁定，会被 evolution_bridge 实际处理） #}
+- <!-- SF_LOG MYSTERY_CLUE mystery_id="<m>" content="<text>" -->         — 埋下/揭露线索
+- <!-- SF_LOG CHARACTER_LOCATION_CHANGE char_id="<c>" location_id="<l>" -->  — 角色位置变化
+- <!-- SF_LOG CHARACTER_PHYSICAL_CHANGE char_id="<c>" status="<status>" -->  — 角色状态变化（alive/dead/missing）
+- <!-- SF_LOG CHARACTER_RELATION_CHANGE char_a="<c1>" char_b="<c2>" residue="<text>" -->  — 关系/情感残留
+- <!-- SF_LOG KNOWLEDGE_GAIN char_id="<c>" fact="<text>" -->              — 角色获取知识
+- <!-- SF_LOG CONFLICT_ESCALATE conflict_id="<c>" intensity_delta="<int>" -->  — 冲突升级
+
+{# 5 类跳过（spec §3.3 锁定，仅记录到 sflog_event，不进入 evolution_bridge） #}
+- <!-- SF_LOG CHARACTER_EMOTION char_id="<c>" emotion="<text>" -->        — 情感（仅记录）
+- <!-- SF_LOG TWIST_REVEAL twist_id="<t>" type="<type>" -->              — 反转揭示
+- <!-- SF_LOG EXPECTATION_FULFILL expectation_id="<e>" -->                — 预期兑现
+- <!-- SF_LOG REGISTRY_CREATE asset_type="<type>" asset_id="<id>" name="<name>" -->  — 注册新资产
+- <!-- SF_LOG GOAL_MILESTONE goal_id="<g>" progress="<int>" -->           — 目标里程碑
+
+=== 预声明的资产操作（必须实现） ===
+{{ predeclared_changes | default('（无）') }}
+
+=== 写作规则 ===
+1. 仅在确实改变了 narrative state 时插入 SF_LOG（不滥用）
+2. SF_LOG 必须是合法 HTML 注释格式（<!-- ... -->），可被 regex_parser 提取
+3. asset_id / char_id 等必须引用预声明或已注册资产
+4. 若预声明中的某项资产未在本章实现，请在正文中明确说明或调整预声明（Step 3 validate_predeclared_changes 会检查）

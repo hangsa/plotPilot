@@ -23,5 +23,13 @@ variables:
     type: string
     required: false
     default: ''
+  - name: sflog_directive
+    desc: |
+      StoryOS SF_LOG 指令块（spec §3.1 锁定 + 11 类 SF_LOG 提示）。
+      由 engine/runtime/storyos_delegate.py 在 Step 1 注入 LLM 上下文。
+      模板路径: sflog_directive.j2
+    type: string
+    required: false
+    default: ''
 output_format: text
 sort_order: 10
