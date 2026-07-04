@@ -28,7 +28,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { NButton } from 'naive-ui'
 import { useStoryosSflogStore } from '@/stores/storyos/sflog'
 
@@ -36,24 +36,36 @@ const props = defineProps<{ slug: string; chapterId: number }>()
 const sflog = useStoryosSflogStore()
 const chapterId = ref(props.chapterId)
 
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+}
+
 const highlightedRaw = computed(() => {
   if (!sflog.currentRaw) return ''
   return sflog.currentRaw.rawText.replace(
     /<!--\s*(SF_LOG[^>]*?)\s*-->/g,
-    (_m, inner) => `<mark class="sf-log-highlight">${inner}</mark>`,
+    (_m, inner: string) => `<mark class="sf-log-highlight">${escapeHtml(inner)}</mark>`,
   )
 })
 
 async function loadRaw() {
-  await sflog.loadRaw(props.slug, Number(chapterId.value))
+  const n = Number(chapterId.value)
+  if (!Number.isFinite(n) || n < 1) return
+  await sflog.loadRaw(props.slug, n)
 }
 
 async function onReparse() {
-  await sflog.reparse(props.slug, chapterId.value)
+  const n = Number(chapterId.value)
+  if (!Number.isFinite(n) || n < 1) return
+  await sflog.reparse(props.slug, n)
 }
 
-onMounted(loadRaw)
-watch(() => props.chapterId, (v) => { chapterId.value = v; loadRaw() })
+watch(() => props.chapterId, (v) => { chapterId.value = v; loadRaw() }, { immediate: true })
 </script>
 
 <style scoped>
