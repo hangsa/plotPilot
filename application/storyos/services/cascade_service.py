@@ -1,7 +1,8 @@
 """CascadeService — BFS 级联执行（spec §4.2 锁定 MAX_DEPTH=3）。"""
 from __future__ import annotations
 
-from domain.storyos.contracts import AssetStatus
+from application.storyos.value_objects.cascade_preview import CascadePreview
+from domain.storyos.contracts import AssetStatus, CascadeTrigger
 from domain.storyos.value_objects.cascade import CascadeResult, CascadeRules, CascadeStep
 from application.storyos.services.conflict_registry_service import ConflictRegistryService
 from application.storyos.services.expectation_registry_service import ExpectationRegistryService
@@ -70,3 +71,33 @@ class CascadeService:
             "goal": self.goal_svc,
             "foreshadowing": self.foreshadowing_svc,
         }.get(asset_type)
+
+    def simulate(
+        self,
+        trigger: CascadeTrigger,
+        source_asset_type: str,
+        source_asset_id: str,
+        target_asset_type: str,
+        target_asset_id: str,
+        new_status: AssetStatus | None = None,
+        intensity_delta: int | None = None,
+    ) -> CascadePreview:
+        """spec §4.1 Step 3 dry-run：模拟级联但不实际应用（1D 前端消费）。"""
+        step = CascadeStep(
+            trigger=trigger, source_asset_type=source_asset_type,
+            source_asset_id=source_asset_id, target_asset_type=target_asset_type,
+            target_asset_id=target_asset_id, new_status=new_status,
+            intensity_delta=intensity_delta, reason="dry-run",
+        )
+        check = self._rules.apply_to(step, set(), self.max_depth)
+        if check["would_create_cycle"] or check["depth_exceeded"]:
+            return CascadePreview(step=step, would_block=True, block_reason=check["reason"])
+        return CascadePreview(
+            step=step, would_block=False,
+            predicted_new_status=new_status,
+            predicted_intensity=(
+                self.expectation_svc.get(target_asset_id).intensity + intensity_delta
+                if intensity_delta is not None and self.expectation_svc is not None
+                else None
+            ),
+        )
