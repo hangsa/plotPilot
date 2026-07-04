@@ -61,3 +61,34 @@ class MigrationAuditService:
 
     def all_records(self) -> List[MigrationAuditRecord]:
         return list(self._records.values())
+
+    def aggregate_report(self) -> dict:
+        """聚合所有审计记录生成最终 JSON 报告（CLI --status 输出）。"""
+        records = self.all_records()
+        by_project: Dict[str, Dict[str, int]] = {}
+        total_errors = 0
+        for r in records:
+            by_project.setdefault(r.project_id, {"migrations": 0, "records": 0})
+            by_project[r.project_id]["migrations"] += 1
+            by_project[r.project_id]["records"] += r.records_migrated
+            total_errors += len(r.errors)
+
+        return {
+            "total_migrations": len(records),
+            "total_records_migrated": sum(r.records_migrated for r in records),
+            "total_errors": total_errors,
+            "by_project": by_project,
+            "migrations": [
+                {
+                    "migration_id": r.migration_id,
+                    "project_id": r.project_id,
+                    "batches_total": r.batches_total,
+                    "batches_done": r.batches_done,
+                    "records_migrated": r.records_migrated,
+                    "status": r.status,
+                    "errors": r.errors,
+                    "started_at": r.started_at,
+                }
+                for r in records
+            ],
+        }
