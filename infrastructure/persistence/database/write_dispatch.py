@@ -199,7 +199,14 @@ class WriteTransaction:
         self._ops: list = []
 
     def queue(self, op) -> None:
-        """向后兼容的 op 入队（与 WriteDispatch.queue 同形）。"""
+        """向后兼容的 op 入队。
+
+        支持两种 op 形态：
+        - ``(sql, params)`` tuple：直接 push 到 writer 线程
+        - callable ``fn(conn, *args, **kwargs)``：在事务退出时由
+          ``WriteDispatch.transaction()`` 用 ``TxnCollectingConnection`` 调用，
+          收集产生的 SQL 后再批量 push
+        """
         self._ops.append(op)
 
     def run(self, executor) -> None:
@@ -212,17 +219,62 @@ class WriteTransaction:
     def queue_apply(self, fn, *args, **kwargs) -> None:
         """入队 fn(conn, *args, **kwargs)。
 
-        参数立即绑定（用 functools.partial）→ 闭包陷阱修复。
-        1B 的 EvolutionBridgeService 用此 API 包装 evolution_apply_actions / registry_apply_with_cascade / sflog_event_record 三个 op。
+        参数在 queue_apply 调用时**快照**（避免闭包陷阱：调用方后续修改
+        原始 args 不会影响已入队的 op）。实际执行时 ``conn`` 作为第一个
+        位置参数注入。
+
+        1B 的 EvolutionBridgeService 用此 API 包装 evolution_apply_actions /
+        registry_apply_with_cascade / sflog_event_record 三个 op。
         """
-        self._ops.append(functools.partial(fn, *args, **kwargs))
+        frozen_args = tuple(args)
+        frozen_kwargs = dict(kwargs)
+
+        def op(conn):
+            return fn(conn, *frozen_args, **frozen_kwargs)
+
+        self._ops.append(op)
+
+
+def _dispatch_ops(ops: list) -> None:
+    """把混合 op 列表转换成 SQL，enqueue_txn_batch 提交到 writer 线程。
+
+    处理流程：
+    1. 在 API 线程上用 ``TxnCollectingConnection`` 实例化临时 conn
+    2. 遍历 ops：
+       - tuple ``(sql, params)``：直接 append 到 conn.operations
+       - callable ``fn(conn, ...)``：调用 fn 收集产生的 SQL
+    3. 把收集到的 SQL 通过 ``enqueue_txn_batch`` 推给 writer 线程（writer 做 BEGIN IMMEDIATE）
+
+    这一层统一处理使 ``transaction()`` 退出和 ``dispatch.queue_apply()`` 走同一条路径，
+    1B 的 EvolutionBridgeService 不必关心 SQL 序列化细节。
+    """
+    if not ops:
+        return
+    conn = TxnCollectingConnection()
+    for op in ops:
+        if isinstance(op, tuple) and len(op) == 2:
+            sql, params = op
+            conn.execute(sql, params)
+        elif callable(op):
+            op(conn)
+        else:
+            raise TypeError(
+                f"unsupported op type: {type(op).__name__}; "
+                "expected (sql, params) tuple or callable"
+            )
+    if conn.operations:
+        enqueue_txn_batch(conn.operations)
 
 
 class WriteDispatch:
     """单写者路由门面（spec §3.5 锁定）。
 
     1A 阶段：transaction() 返回 WriteTransaction 上下文管理器。
-    退出 with 块时：正常退出 → enqueue_txn_batch(_ops)；异常退出 → 丢弃 ops（回滚语义）。
+    退出 with 块时：正常退出 → 用 TxnCollectingConnection 收集 SQL → enqueue_txn_batch；
+    异常退出 → 丢弃 ops（回滚语义）。
+
+    1B 阶段：EvolutionBridgeService 用 ``dispatch.transaction()`` 包装三个 op，
+    ``except`` 块用 ``dispatch.queue_apply()`` 单独写 bridge_log（事务外）。
     """
 
     @contextlib.contextmanager
@@ -230,13 +282,16 @@ class WriteDispatch:
         """返回 WriteTransaction 上下文；退出 with 块时提交/回滚。
 
         Yields:
-            WriteTransaction: 容器，调用方 queue(op) 累积操作。
+            WriteTransaction: 容器，调用方 queue(op) / queue_apply(fn, ...) 累积操作。
 
         On normal exit:
-            enqueue_txn_batch(_ops) is called with all queued ops.
+            通过 ``_dispatch_ops`` 把 callable 跑在临时 ``TxnCollectingConnection`` 上
+            收集 SQL，再 ``enqueue_txn_batch`` 到 writer 线程。
 
         On exception:
-            _ops are discarded; enqueue_txn_batch is NOT called.
+            _ops 丢弃；``enqueue_txn_batch`` 不被调用（回滚语义）。
+            调用方可在 except 块用 ``dispatch.queue_apply(bridge_log_record, ...)``
+            在事务外补写审计行。
         """
         txn = WriteTransaction()
         try:
@@ -245,6 +300,22 @@ class WriteDispatch:
             # 回滚：丢弃 _ops，不派发
             raise
         else:
-            # 提交：派发 _ops 到 writer 线程
-            if txn._ops:
-                enqueue_txn_batch(txn._ops)
+            # 提交：callable 在 API 线程跑出 SQL，再批量 push 到 writer
+            _dispatch_ops(txn._ops)
+
+    def queue_apply(self, fn, *args, **kwargs) -> None:
+        """在事务外单条入队一个 op。
+
+        用于 spec §3.4 约定的 bridge_log 写入路径：bridge 事务回滚后，
+        调用方在 except 块调用 ``dispatch.queue_apply(bridge_log_record, ...)``，
+        该 op 立即在 API 线程跑出 SQL 并 push 到 writer 线程的 IMMEDIATE 事务。
+
+        与 ``transaction()`` 的区别：不参与任何进行中的事务，无回滚挂钩。
+        """
+        frozen_args = tuple(args)
+        frozen_kwargs = dict(kwargs)
+
+        def op(conn):
+            return fn(conn, *frozen_args, **frozen_kwargs)
+
+        _dispatch_ops([op])
