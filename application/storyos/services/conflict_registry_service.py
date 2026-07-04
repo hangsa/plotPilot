@@ -1,6 +1,8 @@
 """Conflict Registry Service。"""
 from __future__ import annotations
 
+from dataclasses import replace
+
 from application.storyos.services.registry_service import GenericRegistryService
 from domain.storyos.entities.conflict import Conflict
 
@@ -11,5 +13,5 @@ class ConflictRegistryService(GenericRegistryService[Conflict]):
         if kwargs.get("escalate"):
             new = new.escalate()
         if "status" in kwargs:
-            new = type(new)(**{**new.__dict__, "status": kwargs["status"]})
+            new = replace(new, status=kwargs["status"])
         return new

@@ -423,6 +423,8 @@ PipelineRunner 决策：
 - `unexpected_records` 非空（无 missing）→ **WARN_AND_PASS**
 - 完全匹配 → **PASS**
 
+> **实现注**：SFLogComplianceGate 常量 `MAX_RETRIES = 4`（即 `record_retry` 最多调用 4 次后第 5 次评估切 FORCE_PASS），与本节 `< 3 / ≥ 3` 边界差一拍——review 1B 决策保留 MAX_RETRIES=4（先 RETRY 后 FORCE_PASS，兼容 §4.3 失败矩阵 D 行），PipelineRunner 实际比较时应使用 `retry_count < MAX_RETRIES` 而非硬编码 3。
+
 ---
 
 ## 5. Error Handling + 测试策略

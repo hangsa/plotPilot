@@ -7,11 +7,10 @@ spec §4.1 序列图：
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
-
 from application.storyos.parsers.sf_log_format_validator import SFLogFormatValidator
 from application.storyos.parsers.sf_log_regex_parser import SFLogRegexParser
 from domain.storyos.value_objects.format_error import FormatError
+from domain.storyos.value_objects.match_report import MatchReport
 from domain.storyos.value_objects.predeclared import PredeclaredChanges, PredeclaredChange
 from domain.storyos.value_objects.sf_log import SFLogRecord
 
@@ -41,7 +40,7 @@ class SFLogParserService:
         self,
         records: list[SFLogRecord],
         predeclared: PredeclaredChanges,
-    ) -> "MatchReport":
+    ) -> MatchReport:
         """spec §4.1 Step 5: match_against_predeclared(records, predeclared) → MatchReport
 
         spec §4.4 锁定 MatchReport 字段：predeclared_total / predeclared_implemented /
@@ -58,35 +57,11 @@ class SFLogParserService:
             r for r in records
             if r.asset_id is not None and r.asset_id not in predeclared_ids
         ]
-        predeclared_total = len(predeclared)  # ← moved BEFORE the next line
+        predeclared_total = len(predeclared)
         implemented = predeclared_total - len(missing)
         return MatchReport(
             predeclared_total=predeclared_total,
             predeclared_implemented=implemented,
             missing_changes=missing,
             unexpected_records=unexpected,
-            match_rate=implemented / max(1, predeclared_total),
         )
-
-
-@dataclass
-class MatchReport:
-    """spec §4.4 锁定的两级重试报告。
-
-    注：domain/storyos/value_objects/match_report.py 已有 Pydantic 版；本 dataclass 是
-    F2 应用层 spec 锁定的本地类型，保持向后兼容（与 MatchReportPydantic 字段对齐）。
-    """
-
-    predeclared_total: int
-    predeclared_implemented: int
-    missing_changes: list[PredeclaredChange]
-    unexpected_records: list[SFLogRecord]
-    match_rate: float
-
-    @property
-    def should_retry(self) -> bool:
-        return len(self.missing_changes) > 0
-
-    @property
-    def has_warnings(self) -> bool:
-        return len(self.unexpected_records) > 0

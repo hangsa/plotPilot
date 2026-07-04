@@ -1,6 +1,8 @@
 """Mystery Registry Service（含 Clue 投影到 RevealedClueItem，sub-spec §3.6 锁定）。"""
 from __future__ import annotations
 
+from dataclasses import replace
+
 from application.storyos.services.registry_service import GenericRegistryService
 from domain.storyos.entities.mystery import Clue, Mystery
 
@@ -9,7 +11,7 @@ class MysteryRegistryService(GenericRegistryService[Mystery]):
     def _apply_update(self, entity: Mystery, **kwargs) -> Mystery:
         new = entity
         if "status" in kwargs:
-            new = type(new)(**{**new.__dict__, "status": kwargs["status"]})
+            new = replace(new, status=kwargs["status"])
         return new
 
     def add_clue(self, mystery_id: str, clue: Clue) -> Mystery:
@@ -24,7 +26,7 @@ class MysteryRegistryService(GenericRegistryService[Mystery]):
         new_clues = tuple(
             c.discover(chapter) if c.id == clue_id else c for c in m.clues
         )
-        m2 = type(m)(**{**m.__dict__, "clues": new_clues})
+        m2 = replace(m, clues=new_clues)
         self._repo[mystery_id] = m2
         # 投影
         clue = next(c for c in m2.clues if c.id == clue_id)

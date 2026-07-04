@@ -116,17 +116,19 @@ class EvolutionBridgeService:
     def _write_bridge_log(self, *, bridge_id, chapter_id, transaction_id,
                           success, error, actions_count, registry_count,
                           cascade_count, duration_ms):
-        """事务外写 bridge_log（spec §3.4 ⚡）。
+        """事务外写 bridge_log（spec §3.4 ⚡ + §4.2 prose 锁定走 WriteDispatch.queue_apply）。
 
         1A 已建表 storyos_bridge_log_v1；1B 阶段直接拼 INSERT，1C 阶段改为调 mapper。
         """
-        from infrastructure.persistence.database.write_dispatch import enqueue_txn_batch
-        enqueue_txn_batch([(
-            "INSERT INTO storyos_bridge_log_v1 "
-            "(id, project_id, chapter_id, transaction_id, evolution_actions_count, "
-            "registry_updates_count, cascade_steps_count, success, error, duration_ms, created_at) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)",
-            (bridge_id, "", chapter_id, transaction_id or "",
-             actions_count, registry_count, cascade_count,
-             int(bool(success)), error or "", duration_ms),
-        )])
+        def _insert(conn):
+            conn.execute(
+                "INSERT INTO storyos_bridge_log_v1 "
+                "(id, project_id, chapter_id, transaction_id, evolution_actions_count, "
+                "registry_updates_count, cascade_steps_count, success, error, duration_ms, created_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)",
+                (bridge_id, "", chapter_id, transaction_id or "",
+                 actions_count, registry_count, cascade_count,
+                 int(bool(success)), error or "", duration_ms),
+            )
+
+        WriteDispatch().queue_apply(_insert)
