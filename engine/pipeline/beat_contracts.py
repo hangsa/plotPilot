@@ -6,11 +6,57 @@ with ``description``, ``target_words``, ``focus`` and ``card_prompt_block``.
 """
 from __future__ import annotations
 
+from dataclasses import dataclass, field
 from types import SimpleNamespace
 from typing import Any, List
 
+from domain.storyos.value_objects.predeclared import (
+    PredeclaredChange,
+    PredeclaredChanges,
+)
+
 
 _OBLIGATION_PREFIX_HEAD = "【章纲节选·须落实】"
+
+
+@dataclass(frozen=True)
+class ScenePlan:
+    """章节执行剧本（spec §3.1 ⚡ 锁定 predeclared_changes 字段）。
+
+    包含：
+    - chapter_id: 章节编号
+    - outline: 章节大纲（来自 Planner）
+    - beats: 微观节拍列表（保留 beat_contracts 现有能力）
+    - predeclared_changes: 预声明的 SF_LOG 操作（spec §4.1 Step 2）
+    """
+    chapter_id: int
+    outline: str
+    beats: List[Any] = field(default_factory=list)
+    predeclared_changes: PredeclaredChanges = field(
+        default_factory=PredeclaredChanges
+    )
+
+    def to_shared_state_dict(self) -> dict:
+        """序列化为 dict（供 checkpoint / BFF API response / 1D StoryOSHub 使用）"""
+        return {
+            "chapter_id": self.chapter_id,
+            "outline": self.outline,
+            "beats": serialize_beats_for_shared_state(self.beats) if self.beats else [],
+            "predeclared_changes": [
+                _predeclared_to_dict(p) for p in self.predeclared_changes
+            ],
+        }
+
+
+def _predeclared_to_dict(p: PredeclaredChange) -> dict:
+    """PredeclaredChange → dict（保留 1A spec §3.2 字段语义）"""
+    return {
+        "log_type": p.log_type.value,
+        "asset_type": p.asset_type,
+        "asset_id": p.asset_id,
+        "asset_pair": list(p.asset_pair) if p.asset_pair else None,
+        "expected_params": dict(p.expected_params),
+    }
 
 
 def _string_list(obj: Any, key: str) -> List[str]:
