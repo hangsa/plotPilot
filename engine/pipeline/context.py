@@ -14,6 +14,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
+from engine.pipeline.beat_contracts import ScenePlan
+
 
 @dataclass
 class PipelineContext:
@@ -60,6 +62,7 @@ class PipelineContext:
     script: str = ""                               # 六模块导演剧本文本
     beat_sheet: Optional[Any] = None             # 规划阶段的 BeatSheet（输入，保留兼容）
     beats: List[Any] = field(default_factory=list)  # 微观节拍 / 写作包
+    scene_plan: Optional[ScenePlan] = None       # 章节执行剧本（spec §3.1，含 predeclared_changes）
 
     # ═══ 步骤4产出：生成内容 ═══
     chapter_content: str = ""                    # 章节正文（最终版）
