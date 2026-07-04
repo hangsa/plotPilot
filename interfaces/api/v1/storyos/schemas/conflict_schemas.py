@@ -15,10 +15,10 @@ class ConflictCreateRequest(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    project_id: str = Field(min_length=1, max_length=64)
+    project_id: Optional[str] = Field(default=None, min_length=1, max_length=64)
     description: str = Field(min_length=1, max_length=2000)
     created_chapter: int = Field(ge=1)
-    involved_characters: list[str] = Field(min_length=1)
+    involved_characters: list[str] = Field(default_factory=lambda: ["unknown"], min_length=1)
     status: AssetStatus = AssetStatus.ACTIVE
     intensity: ConflictIntensity = ConflictIntensity.MEDIUM
     linked_conflicts: list[str] = Field(default_factory=list)
