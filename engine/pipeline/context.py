@@ -14,6 +14,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
+from application.storyos.value_objects.active_assets_context import ActiveAssetsContext
 from engine.pipeline.beat_contracts import ScenePlan
 
 
@@ -63,6 +64,12 @@ class PipelineContext:
     beat_sheet: Optional[Any] = None             # 规划阶段的 BeatSheet（输入，保留兼容）
     beats: List[Any] = field(default_factory=list)  # 微观节拍 / 写作包
     scene_plan: Optional[ScenePlan] = None       # 章节执行剧本（spec §3.1，含 predeclared_changes）
+
+    # ═══ StoryOS 集成产出（1C spec §2.3）═══
+    storyos_active_assets: Optional[ActiveAssetsContext] = None  # Step 1 产出
+    storyos_validation: Optional[Any] = None     # Step 3 产出（PredeclaredValidation）
+    storyos_bridge_result: Optional[Any] = None  # Step 6 产出（BridgeResult）
+    storyos_failed: List[str] = field(default_factory=list)  # 降级记录（spec §4.3 F）
 
     # ═══ 步骤4产出：生成内容 ═══
     chapter_content: str = ""                    # 章节正文（最终版）

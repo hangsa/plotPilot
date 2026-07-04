@@ -431,6 +431,22 @@ class BaseStoryPipeline(ABC):
             except Exception as _fse:
                 logger.debug("伏笔注入失败（跳过）: %s", _fse)
 
+        # ─── StoryOS Step 1 钩子：注入活跃资产摘要（spec §2.3）───
+        if ctx.get_dep("storyos_delegate") is not None or hasattr(ctx, "storyos_delegate"):
+            try:
+                active = self._hook_step1_context_load(ctx)
+                if active is not None:
+                    # 注入到 context_text（自然语言摘要）
+                    asset_summary = self._format_active_assets_for_prompt(active)
+                    if asset_summary:
+                        ctx.context_text = (ctx.context_text or "") + "\n\n" + asset_summary
+                        logger.info(
+                            "[%s] 注入 %d 个活跃资产到上下文",
+                            ctx.novel_id, active.total_active,
+                        )
+            except Exception as e:
+                logger.warning("[%s] Step 1 钩子注入失败: %s", ctx.novel_id, e)
+
         return StepResult.ok()
 
     async def _step_prepare_chapter_plan(self, ctx: PipelineContext) -> StepResult:
@@ -485,6 +501,24 @@ class BaseStoryPipeline(ABC):
             ctx.target_word_count,
         )
         self._attach_chapter_preplan_metadata(ctx)
+
+        # ─── StoryOS Step 3 钩子：pre-write gate 校验 predeclared（spec §2.3）───
+        if ctx.scene_plan is not None and ctx.scene_plan.predeclared_changes:
+            validation = self._hook_step3_pre_write_gate(
+                ctx, ctx.scene_plan.predeclared_changes,
+            )
+            if validation is not None and not getattr(validation, "valid", True):
+                logger.warning(
+                    "[%s] Step 3 predeclared 校验发现问题: %s",
+                    ctx.novel_id,
+                    [i.message for i in getattr(validation, "issues", [])],
+                )
+                # 校验失败不阻断，但记录到 metadata 供 1D 前端展示
+                ctx.metadata["storyos_predeclared_issues"] = [
+                    {"type": i.type.value, "message": i.message, "asset_id": i.asset_id}
+                    for i in validation.issues
+                ]
+
         return StepResult.ok()
 
     def _attach_chapter_preplan_metadata(self, ctx: PipelineContext) -> None:
@@ -670,6 +704,24 @@ class BaseStoryPipeline(ABC):
             ctx.validation_score = 0.85
             ctx.validation_dimensions = {"language_style": 0.85}
 
+        # ─── StoryOS Step 5 钩子：post-write gate 解析 SF_LOG + match（spec §2.3）───
+        if ctx.chapter_content and ctx.scene_plan is not None:
+            match_result = self._hook_step5_post_write_gate(
+                ctx, ctx.chapter_content, ctx.scene_plan.predeclared_changes,
+            )
+            if match_result and "match_report" in match_result:
+                match_report = match_result["match_report"]
+                ctx.metadata["storyos_match_rate"] = match_report.match_rate
+                ctx.metadata["storyos_missing_changes"] = [
+                    {"log_type": p.log_type.value, "asset_id": p.asset_id}
+                    for p in match_report.missing_changes
+                ]
+                if match_report.should_retry:
+                    logger.warning(
+                        "[%s] Step 5 match: %d 个 predeclared 未实现（不阻断，由 Step 6 决策）",
+                        ctx.novel_id, len(match_report.missing_changes),
+                    )
+
         return StepResult.ok()
 
     async def _step_save_chapter(self, ctx: PipelineContext) -> StepResult:
@@ -707,6 +759,32 @@ class BaseStoryPipeline(ABC):
                 ctx.chapter_saved = True
                 ctx.save_method = "queue"
                 self._discard_generation_workspace(ctx)
+
+                # ─── StoryOS Step 6 钩子：apply-state 走 WriteDispatch 单事务（spec §2.3）───
+                if ctx.chapter_content and ctx.scene_plan is not None:
+                    bridge_result = self._hook_step6_apply_state(
+                        ctx, ctx.chapter_content, ctx.scene_plan.predeclared_changes,
+                    )
+                    if bridge_result is not None:
+                        # 1B BridgeResult 字段（spec §3.2 锁定）：
+                        #   success / cascade_steps_executed / cascade_steps_blocked /
+                        #   evolution_actions_applied / sflog_events_recorded / error / warnings
+                        ctx.metadata["storyos_bridge_success"] = bridge_result.success
+                        ctx.metadata["storyos_cascade_count"] = int(
+                            getattr(bridge_result, "cascade_steps_executed", 0) or 0
+                        )
+                        ctx.metadata["storyos_cascade_blocked"] = len(
+                            getattr(bridge_result, "cascade_steps_blocked", []) or []
+                        )
+                        ctx.metadata["storyos_evolution_actions"] = int(
+                            getattr(bridge_result, "evolution_actions_applied", 0) or 0
+                        )
+                        if not bridge_result.success:
+                            logger.warning(
+                                "[%s] Step 6 bridge 失败: %s",
+                                ctx.novel_id, getattr(bridge_result, "error", ""),
+                            )
+
                 return StepResult.ok()
 
             # 降级：通过 repository 直接写库
@@ -714,6 +792,32 @@ class BaseStoryPipeline(ABC):
             ctx.chapter_saved = True
             ctx.save_method = "repository"
             self._discard_generation_workspace(ctx)
+
+            # ─── StoryOS Step 6 钩子：apply-state 走 WriteDispatch 单事务（spec §2.3）───
+            if ctx.chapter_content and ctx.scene_plan is not None:
+                bridge_result = self._hook_step6_apply_state(
+                    ctx, ctx.chapter_content, ctx.scene_plan.predeclared_changes,
+                )
+                if bridge_result is not None:
+                    # 1B BridgeResult 字段（spec §3.2 锁定）：
+                    #   success / cascade_steps_executed / cascade_steps_blocked /
+                    #   evolution_actions_applied / sflog_events_recorded / error / warnings
+                    ctx.metadata["storyos_bridge_success"] = bridge_result.success
+                    ctx.metadata["storyos_cascade_count"] = int(
+                        getattr(bridge_result, "cascade_steps_executed", 0) or 0
+                    )
+                    ctx.metadata["storyos_cascade_blocked"] = len(
+                        getattr(bridge_result, "cascade_steps_blocked", []) or []
+                    )
+                    ctx.metadata["storyos_evolution_actions"] = int(
+                        getattr(bridge_result, "evolution_actions_applied", 0) or 0
+                    )
+                    if not bridge_result.success:
+                        logger.warning(
+                            "[%s] Step 6 bridge 失败: %s",
+                            ctx.novel_id, getattr(bridge_result, "error", ""),
+                        )
+
             return StepResult.ok()
         except Exception as e:
             return StepResult.fail(f"章节保存失败: {e}")
@@ -1223,3 +1327,127 @@ class BaseStoryPipeline(ABC):
     def get_step_log(self) -> List[Dict[str, Any]]:
         """获取步骤执行日志（调试用）"""
         return self._step_log.copy()
+
+    # ═══════════════════════════════════════════════════════════════
+    # StoryOS 钩子入口（spec §2.3 — 1C C1）
+    # ═══════════════════════════════════════════════════════════════
+
+    def _get_storyos_delegate(self, ctx: PipelineContext) -> Any:
+        """从 ctx.metadata 或 ctx._dependencies 获取 StoryOSDelegate（spec §2.3）"""
+        return getattr(ctx, "storyos_delegate", None) or ctx.get_dep("storyos_delegate")
+
+    def _hook_step1_context_load(self, ctx: PipelineContext) -> Any:
+        """Step 1 钩子：context-load → delegate.load_active_assets_for_context
+
+        spec §4.1 Step 1。降级：失败时记录到 ctx.storyos_failed，返回 None。
+        """
+        delegate = self._get_storyos_delegate(ctx)
+        if delegate is None:
+            ctx.storyos_failed.append("step1_context_load: delegate not configured")
+            return None
+        try:
+            result = delegate.load_active_assets_for_context(
+                ctx.novel_id, int(ctx.chapter_number),
+            )
+            ctx.storyos_active_assets = result
+            return result
+        except Exception as e:
+            logger.warning("[%s] Step 1 hook 失败: %s", ctx.novel_id, e)
+            ctx.storyos_failed.append(f"step1_context_load: {e}")
+            return None
+
+    def _hook_step3_pre_write_gate(
+        self, ctx: PipelineContext, predeclared: Any,
+    ) -> Any:
+        """Step 3 钩子：pre-write gate → delegate.validate_predeclared_changes
+
+        spec §4.1 Step 3。降级：失败时 valid=True（不阻断 pipeline）。
+        """
+        delegate = self._get_storyos_delegate(ctx)
+        if delegate is None:
+            ctx.storyos_failed.append("step3_pre_write_gate: delegate not configured")
+            return None
+        try:
+            result = delegate.validate_predeclared_changes(
+                ctx.novel_id, int(ctx.chapter_number), predeclared,
+            )
+            ctx.storyos_validation = result
+            return result
+        except Exception as e:
+            logger.warning("[%s] Step 3 hook 失败: %s", ctx.novel_id, e)
+            ctx.storyos_failed.append(f"step3_pre_write_gate: {e}")
+            return None
+
+    def _hook_step5_post_write_gate(
+        self, ctx: PipelineContext, text: str, predeclared: Any,
+    ) -> Any:
+        """Step 5 钩子：post-write gate → parser.parse + validate + match
+
+        spec §4.1 Step 5。这是 apply_post_write_results 的前半段，单独调用用于
+        在 save_chapter 之前做 match 决策（两级重试）。Step 6 仍会调
+        apply_post_write_results 走完整流水线。
+        """
+        delegate = self._get_storyos_delegate(ctx)
+        if delegate is None:
+            ctx.storyos_failed.append("step5_post_write_gate: delegate not configured")
+            return None
+        # Step 5 只做 match 决策，不实际写库
+        if not hasattr(delegate, "parser_service") or delegate.parser_service is None:
+            ctx.storyos_failed.append("step5_post_write_gate: parser_service not configured")
+            return None
+        try:
+            records = delegate.parser_service.parse(text, int(ctx.chapter_number))
+            format_errors = delegate.parser_service.validate_format(records)
+            if format_errors:
+                ctx.storyos_failed.append(
+                    f"step5_post_write_gate: format errors {[e.code for e in format_errors]}"
+                )
+                return {"format_errors": format_errors, "records": records}
+            match_report = delegate.parser_service.match_against_predeclared(records, predeclared)
+            return {
+                "format_errors": [],
+                "records": records,
+                "match_report": match_report,
+            }
+        except Exception as e:
+            logger.warning("[%s] Step 5 hook 失败: %s", ctx.novel_id, e)
+            ctx.storyos_failed.append(f"step5_post_write_gate: {e}")
+            return None
+
+    def _hook_step6_apply_state(
+        self, ctx: PipelineContext, text: str, predeclared: Any,
+    ) -> Any:
+        """Step 6 钩子：apply-state → delegate.apply_post_write_results
+
+        spec §4.1 Step 6。降级：失败时记录到 ctx.storyos_failed，不抛异常。
+        """
+        delegate = self._get_storyos_delegate(ctx)
+        if delegate is None:
+            ctx.storyos_failed.append("step6_apply_state: delegate not configured")
+            return None
+        try:
+            result = delegate.apply_post_write_results(
+                ctx.novel_id, int(ctx.chapter_number), text, predeclared,
+            )
+            ctx.storyos_bridge_result = result
+            return result
+        except Exception as e:
+            logger.warning("[%s] Step 6 hook 失败: %s", ctx.novel_id, e)
+            ctx.storyos_failed.append(f"step6_apply_state: {e}")
+            return None
+
+    def _format_active_assets_for_prompt(self, active: Any) -> str:
+        """把 ActiveAssetsContext 格式化为 prompt 友好的文本块。"""
+        if active is None or active.total_active == 0:
+            return ""
+        lines = ["=== 本章活跃资产 ==="]
+        for field in ["conflicts", "mysteries", "twists", "promises", "reveals",
+                      "expectations", "goals", "foreshadowings"]:
+            items = getattr(active, field, [])
+            if items:
+                lines.append(f"\n【{field}】（{len(items)} 项）")
+                for item in items[:3]:  # 限 3 个避免 prompt 膨胀
+                    asset_id = item.get("id", "?") if isinstance(item, dict) else "?"
+                    desc = item.get("description", "") if isinstance(item, dict) else ""
+                    lines.append(f"- {asset_id}: {desc[:60]}")
+        return "\n".join(lines)
