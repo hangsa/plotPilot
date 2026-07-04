@@ -11,24 +11,34 @@ from __future__ import annotations
 
 import os
 import sys
+from pathlib import Path
 
 
-CHUNK_DIR = "frontend/dist/assets"
+# Anchor to repo root so the check works regardless of CWD (CI may invoke
+# from frontend/ or any subdirectory).
+CHUNK_DIR = Path(__file__).resolve().parent.parent / "frontend" / "dist" / "assets"
 MAX_SIZE_KB = 500
 
 
 def main() -> int:
-    if not os.path.exists(CHUNK_DIR):
+    if not CHUNK_DIR.exists():
         print(
             f"[FAIL] {CHUNK_DIR} does not exist. "
-            f"Run `cd frontend && npm run build` first."
+            f"Run `cd frontend && npm run build` first.",
+            file=sys.stderr,
         )
         return 1
 
     chunks = [f for f in os.listdir(CHUNK_DIR) if "storyos" in f]
     if not chunks:
-        print(f"[WARN] no storyos chunks found in {CHUNK_DIR}")
-        return 0
+        # No storyos chunks after a build is a real regression (route removed,
+        # entry tree-shaken away). A CI gate must not green-light that.
+        print(
+            f"[FAIL] no storyos chunks found in {CHUNK_DIR}. "
+            f"Expected at least one storyos-* bundle after build.",
+            file=sys.stderr,
+        )
+        return 1
 
     failed = False
     for chunk in sorted(chunks):

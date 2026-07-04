@@ -47,6 +47,7 @@ def test_e2e_storyos_workbench_flow(client):
     ).json()
     assert cf1["status"] == "active"
     assert cf2["status"] == "active"
+    assert cf1["id"] != cf2["id"]  # distinct IDs — catches generator collisions
 
     # 2. List conflicts.
     list_resp = client.get("/api/v1/storyos/proj-1/conflict")
@@ -77,6 +78,11 @@ def test_e2e_storyos_workbench_flow(client):
     # 4. Cascade history (always 200 in 1D, returns empty envelope).
     hist_resp = client.get("/api/v1/storyos/proj-1/cascade/history?limit=10")
     assert hist_resp.status_code == 200
+    hist_body = hist_resp.json()
+    # Assert the envelope shape, not just the status — a fallback route
+    # returning an empty 200 must not silently pass.
+    assert isinstance(hist_body.get("data"), list)
+    assert isinstance(hist_body.get("meta", {}).get("total"), int)
 
     # 5. Project-scoped health (verify endpoint exists and returns valid shape).
     health_resp = client.get("/api/v1/storyos/proj-1/health")
