@@ -1,8 +1,9 @@
-"""StoryOSDelegate 测试 — Step 1 + Step 3 钩子 (spec §3.1)。"""
+"""StoryOSDelegate 测试 — Step 1 + Step 3 + Step 5-6 钩子 (spec §3.1)。"""
 from unittest.mock import MagicMock
 
 from engine.runtime.storyos_delegate import StoryOSDelegate
 from application.storyos.value_objects.active_assets_context import ActiveAssetsContext
+from application.storyos.value_objects.bridge_result import BridgeResult
 from application.storyos.services.predeclared_validation import (
     PredeclaredIssueType, PredeclaredValidation,
 )
@@ -139,3 +140,106 @@ def test_validate_predeclared_changes_returns_valid_when_asset_type_not_in_regis
     # mystery registry 未配置 → valid=True（不阻断）
     assert result.valid is True
     assert any("mystery" in issue.message for issue in result.issues)
+
+
+# ---------------------------------------------------------------------------
+# Step 5-6 钩子测试 — apply_post_write_results (spec §3.1)
+# ---------------------------------------------------------------------------
+
+
+def test_apply_post_write_results_happy_path():
+    """Step 5-6 合并钩子: parse → validate → match → bridge 流水线"""
+    parser = MagicMock()
+    parser.parse.return_value = [MagicMock(log_type="mystery_clue", asset_id="m1")]
+    parser.validate_format.return_value = []  # 无格式错误
+    parser.match_against_predeclared.return_value = MagicMock(
+        missing_changes=[],
+        unexpected_records=[],
+        should_retry=False,
+    )
+
+    bridge = MagicMock()
+    # 1B BridgeResult 14 字段（spec §3.2 锁定）：bridge_id/chapter_id/transaction_id/...
+    expected = BridgeResult(
+        bridge_id="b1", chapter_id=5, transaction_id="tx1",
+        success=True, evolution_actions_applied=3, sflog_events_recorded=1,
+    )
+    bridge.apply_sflog_batch.return_value = expected
+
+    delegate = StoryOSDelegate(parser_service=parser, bridge_service=bridge)
+    predeclared = PredeclaredChanges()
+    result = delegate.apply_post_write_results("n1", 5, "text", predeclared)
+
+    assert result is expected
+    assert result.success is True
+    parser.parse.assert_called_once_with("text", 5)
+    bridge.apply_sflog_batch.assert_called_once()
+
+
+def test_apply_post_write_results_returns_failure_on_format_error():
+    """Step 5: 格式错误时返回失败结果（不抛异常，spec §4.3 A）"""
+    from domain.storyos.value_objects.format_error import FormatError
+
+    parser = MagicMock()
+    parser.parse.return_value = []
+    parser.validate_format.return_value = [
+        FormatError(code="MALFORMED_TAG", message="bad tag", raw_text="", char_position=10),
+    ]
+
+    delegate = StoryOSDelegate(parser_service=parser, bridge_service=MagicMock())
+    result = delegate.apply_post_write_results("n1", 5, "text", PredeclaredChanges())
+    assert result.success is False
+    assert "MALFORMED_TAG" in (result.error or "")
+
+
+def test_apply_post_write_results_bridge_failure_records_force_pass():
+    """Step 6: bridge 失败时调用 compliance_gate.record_force_pass（spec §4.3 D）
+
+    1B ComplianceGate 是通过 circuit_breaker 暴露 record_force_pass，
+    delegate 必须走 circuit_breaker.record_force_pass(scope_id, gate, notes)
+    """
+    from application.storyos.services.evolution_bridge_service import EvolutionBridgeError
+
+    parser = MagicMock()
+    parser.parse.return_value = []
+    parser.validate_format.return_value = []
+    parser.match_against_predeclared.return_value = MagicMock(
+        missing_changes=[], unexpected_records=[], should_retry=False,
+    )
+
+    bridge = MagicMock()
+    bridge.apply_sflog_batch.side_effect = EvolutionBridgeError("SQL constraint")
+
+    gate = MagicMock()
+    # 1B SFLogComplianceGate 暴露 circuit_breaker 属性
+    cb = MagicMock()
+    gate.circuit_breaker = cb
+    cb.record_force_pass = MagicMock()
+
+    delegate = StoryOSDelegate(
+        parser_service=parser, bridge_service=bridge, compliance_gate=gate,
+    )
+    result = delegate.apply_post_write_results("n1", 5, "text", PredeclaredChanges())
+    assert result.success is False
+    cb.record_force_pass.assert_called_once()
+    call_args = cb.record_force_pass.call_args
+    # 1B record_force_pass(scope_id, gate, notes) 位置参数
+    assert call_args.args[0] == "n1:5"  # scope_id
+    assert call_args.args[1] == "evolution_bridge"  # gate name
+    assert "SQL constraint" in call_args.args[2]  # notes
+
+
+def test_apply_post_write_results_returns_failure_on_parser_exception():
+    """降级: parser 抛异常时返回失败 BridgeResult（spec §4.3 F）
+
+    返回的失败 BridgeResult 仍需 14 字段全填，success=False + error=...。
+    """
+    parser = MagicMock()
+    parser.parse.side_effect = RuntimeError("regex catastrophic backtrack")
+    delegate = StoryOSDelegate(parser_service=parser, bridge_service=MagicMock())
+    result = delegate.apply_post_write_results("n1", 5, "text", PredeclaredChanges())
+    assert result.success is False
+    assert "regex catastrophic" in (result.error or "")
+    # 验证 14 字段都有合法值（即使失败也保留结构）
+    assert result.bridge_id  # 由 delegate 生成
+    assert result.chapter_id == 5

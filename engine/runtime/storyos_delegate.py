@@ -175,6 +175,106 @@ class StoryOSDelegate:
             issues=issues,
         )
 
-    # B3 任务占位
-    def apply_post_write_results(self, *args, **kwargs):  # placeholder
-        raise NotImplementedError("Phase 1C Task B3")
+    def apply_post_write_results(
+        self,
+        novel_id: str,
+        chapter_id: int,
+        text: str,
+        predeclared: PredeclaredChanges,
+    ) -> BridgeResult:
+        """Step 5-6 合并钩子：parse → validate → match → bridge。
+
+        spec §4.1 Step 5：
+            Runner->>Parser: parse(text, chapter_id=5)
+            Runner->>Parser: validate_format(text)
+            Runner->>Parser: match_against_predeclared(records, predeclared)
+        spec §4.1 Step 6：
+            Runner->>Bridge: apply_sflog_batch(novel_id, 5, records)
+
+        失败模式（spec §4.3）：
+        - A 格式错误 → 返回 success=False BridgeResult（14 字段，error 含 format code）
+        - B predeclared 校验失败 → 调 compliance_gate.evaluate 走 RETRY/FORCE_PASS
+        - C cascade 错误 → bridge 内部处理
+        - D bridge 错误 → ROLLBACK + 调 circuit_breaker.record_force_pass
+        - F 持久化错误 → bridge 内部 retry
+        """
+        scope_id = f"{novel_id}:{chapter_id}"
+        if self.parser_service is None or self.bridge_service is None:
+            logger.warning("[storyos] parser_service/bridge_service 未注入")
+            return BridgeResult(
+                bridge_id=f"degraded-{scope_id}", chapter_id=chapter_id,
+                transaction_id=None, success=False,
+                error="parser_service or bridge_service not configured",
+            )
+
+        try:
+            records = self.parser_service.parse(text, chapter_id)
+        except Exception as e:
+            logger.warning("[storyos] parser.parse 失败: %s", e)
+            return BridgeResult(
+                bridge_id=f"degraded-{scope_id}", chapter_id=chapter_id,
+                transaction_id=None, success=False,
+                error=f"parser.parse 异常: {e}",
+            )
+
+        try:
+            format_errors = self.parser_service.validate_format(records)
+        except Exception as e:
+            logger.warning("[storyos] parser.validate_format 失败: %s", e)
+            format_errors = []
+
+        if format_errors:
+            # spec §4.3 A: 格式错误不阻断 pipeline，记录 status='format_error'
+            return BridgeResult(
+                bridge_id=f"format-error-{scope_id}", chapter_id=chapter_id,
+                transaction_id=None, success=False,
+                warnings=[f"format_error: {e.code}" for e in format_errors],
+                error=f"format errors: {[e.code for e in format_errors]}",
+            )
+
+        try:
+            match_report = self.parser_service.match_against_predeclared(records, predeclared)
+        except Exception as e:
+            logger.warning("[storyos] match_against_predeclared 失败: %s", e)
+            match_report = None
+
+        # spec §4.4：missing_changes 触发 RETRY → 阈值后 FORCE_PASS
+        # 1B SFLogComplianceGate.evaluate(predeclared, records, scope_id) 签名
+        if self.compliance_gate is not None and match_report is not None:
+            try:
+                decision = self.compliance_gate.evaluate(predeclared, records, scope_id)
+                if decision == ComplianceDecision.RETRY:
+                    logger.info(
+                        "[storyos] match_report missing=%d，RETRY 决策由 PipelineRunner 处理",
+                        len(match_report.missing_changes),
+                    )
+                # FORCE_PASS / PASS / WARN 都不阻断，继续走 bridge
+            except Exception as e:
+                logger.warning("[storyos] compliance_gate.evaluate 失败: %s", e)
+
+        try:
+            return self.bridge_service.apply_sflog_batch(novel_id, chapter_id, records)
+        except EvolutionBridgeError as e:
+            # spec §4.3 D: bridge 错误 ROLLBACK + force_pass
+            logger.warning("[storyos] bridge 失败: %s", e)
+            if self.compliance_gate is not None and self.compliance_gate.circuit_breaker is not None:
+                try:
+                    # 1B record_force_pass(scope_id, gate, notes) 位置参数
+                    self.compliance_gate.circuit_breaker.record_force_pass(
+                        scope_id, "evolution_bridge", f"bridge failed: {e}",
+                    )
+                except Exception as gate_err:
+                    logger.warning("[storyos] record_force_pass 失败: %s", gate_err)
+            return BridgeResult(
+                bridge_id=f"bridge-failed-{scope_id}", chapter_id=chapter_id,
+                transaction_id=None, success=False,
+                error=f"bridge failed: {e}",
+            )
+        except Exception as e:
+            # spec §4.3 F: 未知错误
+            logger.error("[storyos] apply_post_write_results 未知错误: %s", e, exc_info=True)
+            return BridgeResult(
+                bridge_id=f"unknown-error-{scope_id}", chapter_id=chapter_id,
+                transaction_id=None, success=False,
+                error=f"unknown error: {e}",
+            )
