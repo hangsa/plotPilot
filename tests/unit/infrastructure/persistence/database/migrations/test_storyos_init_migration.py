@@ -81,30 +81,58 @@ def test_bridge_log_table_has_no_registry_columns(tmp_path):
 
 
 def test_migration_matches_sa_schema_columns(tmp_path):
-    """每个表的 DDL 列集合必须 == SQLAlchemy 声明列集合（防 schema ↔ migration 漂移）。"""
+    """每个表的 DDL 列集合必须 == SQLAlchemy 声明列集合（防 schema ↔ migration 漂移）。
+
+    覆盖全部 11 张 storyos 表：8 registry + 3 audit。任何一张表的 schema
+    增加/删除/重命名字段未同步到 DDL 都会失败。
+    """
     db_path = tmp_path / "test.db"
     from infrastructure.persistence.database.migrations.versions import (
         storyos_init_0001,
     )
+    from infrastructure.persistence.storyos.schemas.bridge_log_schema import (
+        BridgeLogSchema,
+    )
+    from infrastructure.persistence.storyos.schemas.cascade_history_schema import (
+        CascadeHistorySchema,
+    )
     from infrastructure.persistence.storyos.schemas.conflict_schema import (
         ConflictSchema,
+    )
+    from infrastructure.persistence.storyos.schemas.expectation_schema import (
+        ExpectationSchema,
     )
     from infrastructure.persistence.storyos.schemas.foreshadowing_schema import (
         ForeshadowingSchema,
     )
+    from infrastructure.persistence.storyos.schemas.goal_schema import GoalSchema
     from infrastructure.persistence.storyos.schemas.mystery_schema import (
         MysterySchema,
     )
-    from infrastructure.persistence.storyos.schemas.twist_schema import TwistSchema
-    from infrastructure.persistence.storyos.schemas.bridge_log_schema import (
-        BridgeLogSchema,
+    from infrastructure.persistence.storyos.schemas.promise_schema import (
+        PromiseSchema,
     )
+    from infrastructure.persistence.storyos.schemas.reveal_schema import (
+        RevealSchema,
+    )
+    from infrastructure.persistence.storyos.schemas.sflog_event_schema import (
+        SFLogEventSchema,
+    )
+    from infrastructure.persistence.storyos.schemas.twist_schema import TwistSchema
 
     pairs = [
+        # 8 registry tables (BaseRegistrySchema + entity fields)
         ("storyos_conflict_v1", ConflictSchema),
         ("storyos_mystery_v1", MysterySchema),
         ("storyos_twist_v1", TwistSchema),
+        ("storyos_promise_v1", PromiseSchema),
+        ("storyos_reveal_v1", RevealSchema),
+        ("storyos_expectation_v1", ExpectationSchema),
+        ("storyos_goal_v1", GoalSchema),
         ("storyos_foreshadowing_v1", ForeshadowingSchema),
+        # 3 audit tables
+        ("storyos_cascade_history_v1", CascadeHistorySchema),
+        ("storyos_sflog_event_v1", SFLogEventSchema),
         ("storyos_bridge_log_v1", BridgeLogSchema),
     ]
     conn = sqlite3.connect(str(db_path))
@@ -115,8 +143,8 @@ def test_migration_matches_sa_schema_columns(tmp_path):
             ddl_cols = {row[1] for row in cur.fetchall()}
             sa_cols = {c.name for c in schema_cls.__table__.columns}
             assert ddl_cols == sa_cols, (
-                f"{table_name}: DDL has {ddl_cols - sa_cols} extra, "
-                f"missing {sa_cols - ddl_cols}"
+                f"{table_name}: DDL has extra={ddl_cols - sa_cols}, "
+                f"missing={sa_cols - ddl_cols}"
             )
     finally:
         conn.close()
