@@ -38,6 +38,7 @@ class MigrationExecuteResponse(BaseModel):
     status: str = Field(min_length=1, max_length=32)
     batches_total: int = Field(ge=0)
     batches_done: int = Field(ge=0)
+    records_migrated: int = Field(ge=0)
     errors: list[FormatError] = Field(default_factory=list)
 
 
