@@ -93,23 +93,34 @@ async function onSimulate() {
 
 function rebuildGraph() {
   const steps = cascade.lastSimulation?.steps ?? []
-  vueFlowNodes.value = steps.map((s, i) => ({
-    id: `s${i}-${s.targetAssetId}`,
-    type: 'cascadeStep',
-    position: { x: (i + 1) * 220, y: 100 },
-    data: s,
-  }))
+
+  // Build node-id index keyed by targetAssetId so edges can resolve fan-in/fan-out
+  // (e.g. when one source triggers multiple targets, or several steps converge on
+  // the same target). Without this lookup the previous "prevTargetId" chain would
+  // miswire all non-linear cascades once 1E exposes real data.
+  const targetIdToNodeId = new Map<string, string>()
+  vueFlowNodes.value = steps.map((s, i) => {
+    const nodeId = `s${i}-${s.targetAssetId}`
+    targetIdToNodeId.set(s.targetAssetId, nodeId)
+    return {
+      id: nodeId,
+      type: 'cascadeStep',
+      position: { x: (i + 1) * 220, y: 100 },
+      data: s,
+    }
+  })
   vueFlowNodes.value.unshift({
     id: `root-${steps[0]?.sourceAssetId ?? 'unknown'}`,
     type: 'cascadeStep',
     position: { x: 0, y: 100 },
     data: { label: 'Source', assetId: steps[0]?.sourceAssetId },
   })
+
   const edges: typeof vueFlowEdges.value = []
-  let prevTargetId: string | null = null
   steps.forEach((s, i) => {
     const nodeId = `s${i}-${s.targetAssetId}`
-    const sourceId = prevTargetId ?? `root-${s.sourceAssetId}`
+    const upstream = targetIdToNodeId.get(s.sourceAssetId)
+    const sourceId = upstream ?? `root-${s.sourceAssetId}`
     edges.push({
       id: `e${i}`,
       source: sourceId,
@@ -117,7 +128,6 @@ function rebuildGraph() {
       label: s.trigger,
       animated: true,
     })
-    prevTargetId = nodeId
   })
   vueFlowEdges.value = edges
 }
