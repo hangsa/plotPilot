@@ -260,8 +260,10 @@ class StoryOSDelegate:
             if self.compliance_gate is not None and self.compliance_gate.circuit_breaker is not None:
                 try:
                     # 1B record_force_pass(scope_id, gate, notes) 位置参数
+                    # gate 名必须与 EvolutionBridgeService + SFLogComplianceGate.GATE 一致，
+                    # 避免 retry/force_pass 计数分裂到两个 key（review-1c-b3 important fix）
                     self.compliance_gate.circuit_breaker.record_force_pass(
-                        scope_id, "evolution_bridge", f"bridge failed: {e}",
+                        scope_id, "sflog_compliance", f"bridge failed: {e}",
                     )
                 except Exception as gate_err:
                     logger.warning("[storyos] record_force_pass 失败: %s", gate_err)

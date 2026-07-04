@@ -225,7 +225,7 @@ def test_apply_post_write_results_bridge_failure_records_force_pass():
     call_args = cb.record_force_pass.call_args
     # 1B record_force_pass(scope_id, gate, notes) 位置参数
     assert call_args.args[0] == "n1:5"  # scope_id
-    assert call_args.args[1] == "evolution_bridge"  # gate name
+    assert call_args.args[1] == "sflog_compliance"  # gate name (must match EvolutionBridgeService)
     assert "SQL constraint" in call_args.args[2]  # notes
 
 
