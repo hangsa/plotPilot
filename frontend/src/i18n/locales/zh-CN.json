@@ -1,0 +1,26 @@
+{
+  "storyos": {
+    "title": "叙事资产",
+    "section": {
+      "registries": "注册表",
+      "observability": "可观测性"
+    },
+    "asset": {
+      "conflict": "冲突",
+      "mystery": "谜题",
+      "twist": "反转",
+      "promise": "承诺",
+      "reveal": "揭示",
+      "expectation": "预期",
+      "goal": "目标",
+      "foreshadowing": "伏笔",
+      "cascadeGraph": "级联图",
+      "sflogInspector": "SF_LOG 检查器",
+      "predeclaredDiff": "预声明差异"
+    },
+    "meta": {
+      "chapter": "章节",
+      "intensity": "强度"
+    }
+  }
+}

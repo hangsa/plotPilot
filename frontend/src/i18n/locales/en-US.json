@@ -1,0 +1,26 @@
+{
+  "storyos": {
+    "title": "Narrative Assets",
+    "section": {
+      "registries": "Registries",
+      "observability": "Observability"
+    },
+    "asset": {
+      "conflict": "Conflict",
+      "mystery": "Mystery",
+      "twist": "Twist",
+      "promise": "Promise",
+      "reveal": "Reveal",
+      "expectation": "Expectation",
+      "goal": "Goal",
+      "foreshadowing": "Foreshadowing",
+      "cascadeGraph": "Cascade Graph",
+      "sflogInspector": "SF_LOG Inspector",
+      "predeclaredDiff": "Predeclared Diff"
+    },
+    "meta": {
+      "chapter": "Chapter",
+      "intensity": "Intensity"
+    }
+  }
+}

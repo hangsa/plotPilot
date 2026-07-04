@@ -2,6 +2,11 @@ import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import { resolve } from 'path'
 
+// Stub for `vue-i18n`: app does not install vue-i18n, but some components
+// import it for type-tolerance. Alias it to the identity stub so production
+// build can resolve the import (mirrors vitest.config.ts).
+const i18nStubPath = resolve(__dirname, 'src/__mocks__/vue-i18n.ts')
+
 // https://vite.dev/config/
 export default defineConfig({
   build: {
@@ -13,6 +18,7 @@ export default defineConfig({
           if (!id.includes('node_modules')) return undefined
           if (id.includes('naive-ui')) return 'naive-ui'
           if (id.includes('echarts') || id.includes('zrender')) return 'echarts'
+          if (id.includes('@vue-flow') || id.includes('vue-echarts')) return 'storyos-vendor'
           if (id.includes('@vue')) return 'vue-runtime'
           return 'vendor'
         },
@@ -21,9 +27,10 @@ export default defineConfig({
   },
   plugins: [vue()],
   resolve: {
-    alias: {
-      '@': resolve(__dirname, 'src'),
-    },
+    alias: [
+      { find: 'vue-i18n', replacement: i18nStubPath },
+      { find: '@', replacement: resolve(__dirname, 'src') },
+    ],
   },
   server: {
     port: 3000,
