@@ -790,21 +790,24 @@ async def get_sflog_service() -> None:
 
 
 async def get_migration_service() -> None:
-    _not_implemented("get_migration_service")
+    """C3 1D stub: real ForeshadowingMigrationService wiring lands in 1E."""
+    return None
 
 
 async def get_health_service() -> None:
-    _not_implemented("get_health_service")
+    """C4 1D stub: real HealthService wiring lands in 1E."""
+    return None
 
 
 async def get_metrics_service() -> None:
-    _not_implemented("get_metrics_service")
+    """C4 1D stub: real MetricsService wiring lands in 1E."""
+    return None
 
 
 def _not_implemented(service_name: str) -> None:
-    """Placeholder error used by Group B/C stub providers (B2, C1-C4)."""
+    """Placeholder error used by Group B stub providers (B2)."""
     raise NotImplementedError(
-        f"{service_name} provider not yet wired — see tasks B2 / C1-C4"
+        f"{service_name} provider not yet wired — see tasks B2"
     )
 
 
