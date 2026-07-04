@@ -4,6 +4,7 @@ The limits here intentionally stay small: callers may retry transient transport
 or empty-response failures, but no path should loop indefinitely or spend user
 tokens without a bounded budget.
 """
+from __future__ import annotations
 
 # 含首次调用在内，同一结构化/解析流程最多调用 LLM 的次数
 LLM_MAX_TOTAL_ATTEMPTS = 3

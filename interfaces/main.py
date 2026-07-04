@@ -2,7 +2,11 @@
 
 提供 RESTful API 接口。
 """
+from __future__ import annotations
+
 import os
+from typing import Optional
+
 from interfaces.api.settings import (
     BackendSettings,
     configure_process_environment,
@@ -86,8 +90,8 @@ _FRONTEND_DIR = settings.frontend_dir
 _FRONTEND_ASSETS_DIR = _FRONTEND_DIR / "assets"
 _INDEX_HTML = _FRONTEND_DIR / "index.html"
 _FAVICON = _FRONTEND_DIR / "favicon.svg"
-_lifecycle: BackendLifecycle | None = None
-_daemon_manager: AutopilotDaemonManager | None = None
+_lifecycle: Optional[BackendLifecycle] = None
+_daemon_manager: Optional[AutopilotDaemonManager] = None
 
 
 def _get_lifecycle() -> BackendLifecycle:
@@ -171,7 +175,7 @@ def _register_spa_fallback(created: FastAPI) -> None:
         return FileResponse(str(index_html), media_type="text/html")
 
 
-def create_app(app_settings: BackendSettings | None = None) -> FastAPI:
+def create_app(app_settings: Optional[BackendSettings] = None) -> FastAPI:
     """Create the FastAPI application while preserving the legacy module entry."""
     app_settings = app_settings or get_backend_settings()
 
@@ -336,7 +340,7 @@ def restart_autopilot_daemon():
 
 
 # ── Windows CTRL+C 防卡死：看门狗线程 + atexit 双保险 ──
-_shutdown_deadline: float | None = None
+_shutdown_deadline: Optional[float] = None
 
 
 def _force_exit_watchdog() -> None:
