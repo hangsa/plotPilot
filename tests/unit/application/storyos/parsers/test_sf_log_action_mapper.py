@@ -22,7 +22,7 @@ def test_mapper_emits_action_for_location_change():
     actions, skipped = m.map_records([rec])
     assert len(actions) == 1
     assert actions[0].type == ActionType.MOVE_CHARACTER.value
-    assert skipped == []
+    assert skipped == set()
 
 
 def test_mapper_skips_mystery_clue():
