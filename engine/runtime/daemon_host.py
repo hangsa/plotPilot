@@ -32,6 +32,7 @@ from domain.novel.value_objects.chapter_id import ChapterId
 from domain.novel.value_objects.word_count import WordCount
 from domain.novel.value_objects.generation_preferences import GenerationPreferences
 from domain.structure.story_node import StoryNode
+from engine.runtime.storyos_delegate import StoryOSDelegate
 
 logger = logging.getLogger(__name__)
 
@@ -69,6 +70,7 @@ def init_daemon_dependencies(
     foreshadowing_repository=None,
     knowledge_service=None,
     use_story_pipeline_for_writing: bool | None = None,
+    storyos_delegate: StoryOSDelegate | None = None,  # 1C C2 新增
 ) -> None:
     """注入守护进程依赖 — AutopilotDaemon / StoryPipelineRunner 共用（Phase 8）"""
     if use_story_pipeline_for_writing is None:
@@ -91,6 +93,7 @@ def init_daemon_dependencies(
     host.foreshadowing_repository = foreshadowing_repository
     host.knowledge_service = knowledge_service
     host.use_story_pipeline_for_writing = use_story_pipeline_for_writing
+    host.storyos_delegate = storyos_delegate  # 1C C2 新增
 
     host._beat_exhausted_rewrite_count = {}
     host._pending_chapter_micro_beats = {}

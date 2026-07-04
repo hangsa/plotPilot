@@ -70,6 +70,7 @@ class PipelineContext:
     storyos_validation: Optional[Any] = None     # Step 3 产出（PredeclaredValidation）
     storyos_bridge_result: Optional[Any] = None  # Step 6 产出（BridgeResult）
     storyos_failed: List[str] = field(default_factory=list)  # 降级记录（spec §4.3 F）
+    storyos_delegate: Any = None                 # 1C C2 注入：4 个 hook 读取
 
     # ═══ 步骤4产出：生成内容 ═══
     chapter_content: str = ""                    # 章节正文（最终版）

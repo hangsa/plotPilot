@@ -10,6 +10,7 @@ from typing import Any, List, Optional
 from engine.pipeline.base import BaseStoryPipeline
 from engine.pipeline.context import PipelineContext
 from engine.runtime.daemon_host import DaemonHostMixin, init_daemon_dependencies
+from engine.runtime.storyos_delegate import StoryOSDelegate
 
 logger = logging.getLogger(__name__)
 
@@ -38,6 +39,7 @@ class StoryPipelineRunner(DaemonHostMixin, BaseStoryPipeline):
         foreshadowing_repository=None,
         knowledge_service=None,
         use_story_pipeline_for_writing: bool | None = None,
+        storyos_delegate: StoryOSDelegate | None = None,  # 1C C2 新增
     ):
         BaseStoryPipeline.__init__(self)
         init_daemon_dependencies(
@@ -58,6 +60,7 @@ class StoryPipelineRunner(DaemonHostMixin, BaseStoryPipeline):
             foreshadowing_repository=foreshadowing_repository,
             knowledge_service=knowledge_service,
             use_story_pipeline_for_writing=use_story_pipeline_for_writing,
+            storyos_delegate=storyos_delegate,  # 1C C2 新增
         )
         self._legacy_daemon: Any = None
 
@@ -93,6 +96,7 @@ class StoryPipelineRunner(DaemonHostMixin, BaseStoryPipeline):
             circuit_breaker=self.circuit_breaker,
             volume_summary_service=self.volume_summary_service,
             autopilot_host=self.host,
+            storyos_delegate=self.storyos_delegate,  # 1C C2 新增
         )
 
         try:
