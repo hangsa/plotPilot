@@ -7,8 +7,6 @@ from interfaces.api.v1.storyos.dependencies import get_cascade_service
 from interfaces.api.v1.storyos.schemas.cascade_schemas import (
     CascadeReplayRequest,
     CascadeSimulateRequest,
-    CascadeSimulateResponse,
-    CascadeSimulateSummary,
 )
 from interfaces.api.v1.storyos.schemas.common_schemas import (
     ListResponseEnvelope,
@@ -18,25 +16,23 @@ from interfaces.api.v1.storyos.schemas.common_schemas import (
 router = APIRouter(prefix="/api/v1/storyos/{project_id}/cascade", tags=["storyos-cascade"])
 
 
-@router.post("/simulate", response_model=CascadeSimulateResponse)
+@router.post("/simulate")
 async def simulate_cascade(
     req: CascadeSimulateRequest,
     _service=Depends(get_cascade_service),
-) -> CascadeSimulateResponse:
-    """1D stub: real cascade-from-trigger requires finding linked assets across
-    8 registries (a 1E-grade feature). Returns an empty success envelope so
-    front-end can wire the route now; 1E replaces this body with real logic.
+) -> dict:
+    """1D stub: real cascade-from-trigger requires walking linked assets across
+    8 registries (a 1E-grade feature). Returns 501 NOT_IMPLEMENTED rather than
+    fabricated success data — frontend must surface this honestly until 1E
+    wires the real CascadeService.
     """
-    return CascadeSimulateResponse(
-        steps=[],
-        blocked_steps=[],
-        summary=CascadeSimulateSummary(
-            would_block=False,
-            max_depth_reached=req.max_depth,
-            steps_count=0,
-            blocked_steps_count=0,
-            would_create_cycle=False,
-        ),
+    raise HTTPException(
+        status_code=501,
+        detail={
+            "code": "NOT_IMPLEMENTED",
+            "message": "cascade simulate is not implemented in 1D; see plan 1E",
+            "details": {"phase": "1E", "scheduled": "2026-07"},
+        },
     )
 
 

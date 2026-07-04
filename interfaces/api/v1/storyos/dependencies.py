@@ -1,6 +1,7 @@
 """StoryOS FastAPI dependency providers with adapter layer over 1B registry services."""
 from __future__ import annotations
 
+import threading
 from dataclasses import replace
 from typing import Generic, Optional, TypeVar
 from uuid import uuid4
@@ -53,6 +54,13 @@ class _BaseAPIAdapter(Generic[TEntity, TCreate, TUpdate]):
 
     def __init__(self, service: GenericRegistryService) -> None:
         self._svc = service
+        # Serialize mutating operations per adapter. The 1B GenericRegistryService
+        # uses an in-memory dict with no internal lock; update() does
+        # get -> replace -> delete -> create, which is a non-atomic composite that
+        # two concurrent requests could interleave on (last-writer-wins or, worse,
+        # a KeyError if delete runs twice). Holding this lock across the composite
+        # makes update() atomic per-adapter without blocking reads.
+        self._lock = threading.Lock()
 
     def _scope(self) -> list[TEntity]:
         return list(self._svc.list())
@@ -122,22 +130,23 @@ class ConflictAPIAdapter(_BaseAPIAdapter[Conflict, object, object]):
         return self._svc.create(entity)
 
     async def update(self, project_id: str, asset_id: str, data) -> Optional[Conflict]:
-        try:
-            old = self._svc.get(asset_id)
-        except KeyError:
-            return None
-        if old.novel_id != project_id:
-            return None
-        updates = data.model_dump(exclude_unset=True)
-        # Pydantic field names map 1:1 to dataclass fields except status / intensity
-        # which are AssetStatus / ConflictIntensity already (Pydantic enums stay as-is).
-        replace_kwargs: dict = {}
-        for key, value in updates.items():
-            replace_kwargs[key] = value
-        new = replace(old, **replace_kwargs)
-        self._svc.delete(asset_id)  # force replace via create path
-        self._svc.create(new)
-        return new
+        with self._lock:
+            try:
+                old = self._svc.get(asset_id)
+            except KeyError:
+                return None
+            if old.novel_id != project_id:
+                return None
+            updates = data.model_dump(exclude_unset=True)
+            # Pydantic field names map 1:1 to dataclass fields except status / intensity
+            # which are AssetStatus / ConflictIntensity already (Pydantic enums stay as-is).
+            replace_kwargs: dict = {}
+            for key, value in updates.items():
+                replace_kwargs[key] = value
+            new = replace(old, **replace_kwargs)
+            self._svc.delete(asset_id)  # force replace via create path
+            self._svc.create(new)
+            return new
 
     async def delete(self, project_id: str, asset_id: str) -> None:
         existing = await self.get(project_id, asset_id)
@@ -208,17 +217,18 @@ class MysteryAPIAdapter(_BaseAPIAdapter[Mystery, object, object]):
         return self._svc.create(entity)
 
     async def update(self, project_id: str, asset_id: str, data) -> Optional[Mystery]:
-        try:
-            old = self._svc.get(asset_id)
-        except KeyError:
-            return None
-        if old.novel_id != project_id:
-            return None
-        updates = data.model_dump(exclude_unset=True)
-        new = replace(old, **updates)
-        self._svc.delete(asset_id)
-        self._svc.create(new)
-        return new
+        with self._lock:
+            try:
+                old = self._svc.get(asset_id)
+            except KeyError:
+                return None
+            if old.novel_id != project_id:
+                return None
+            updates = data.model_dump(exclude_unset=True)
+            new = replace(old, **updates)
+            self._svc.delete(asset_id)
+            self._svc.create(new)
+            return new
 
     async def delete(self, project_id: str, asset_id: str) -> None:
         existing = await self.get(project_id, asset_id)
@@ -266,19 +276,20 @@ class PromiseAPIAdapter(_BaseAPIAdapter[Promise, object, object]):
         return self._svc.create(entity)
 
     async def update(self, project_id: str, asset_id: str, data) -> Optional[Promise]:
-        try:
-            old = self._svc.get(asset_id)
-        except KeyError:
-            return None
-        if old.novel_id != project_id:
-            return None
-        updates = data.model_dump(exclude_unset=True)
-        # Map project_id (if present) -> novel_id to mirror entity field naming
-        updates.pop("project_id", None)
-        new = replace(old, **updates)
-        self._svc.delete(asset_id)
-        self._svc.create(new)
-        return new
+        with self._lock:
+            try:
+                old = self._svc.get(asset_id)
+            except KeyError:
+                return None
+            if old.novel_id != project_id:
+                return None
+            updates = data.model_dump(exclude_unset=True)
+            # Map project_id (if present) -> novel_id to mirror entity field naming
+            updates.pop("project_id", None)
+            new = replace(old, **updates)
+            self._svc.delete(asset_id)
+            self._svc.create(new)
+            return new
 
     async def delete(self, project_id: str, asset_id: str) -> None:
         existing = await self.get(project_id, asset_id)
@@ -325,18 +336,19 @@ class GoalAPIAdapter(_BaseAPIAdapter[Goal, object, object]):
         return self._svc.create(entity)
 
     async def update(self, project_id: str, asset_id: str, data) -> Optional[Goal]:
-        try:
-            old = self._svc.get(asset_id)
-        except KeyError:
-            return None
-        if old.novel_id != project_id:
-            return None
-        updates = data.model_dump(exclude_unset=True)
-        updates.pop("project_id", None)
-        new = replace(old, **updates)
-        self._svc.delete(asset_id)
-        self._svc.create(new)
-        return new
+        with self._lock:
+            try:
+                old = self._svc.get(asset_id)
+            except KeyError:
+                return None
+            if old.novel_id != project_id:
+                return None
+            updates = data.model_dump(exclude_unset=True)
+            updates.pop("project_id", None)
+            new = replace(old, **updates)
+            self._svc.delete(asset_id)
+            self._svc.create(new)
+            return new
 
     async def delete(self, project_id: str, asset_id: str) -> None:
         existing = await self.get(project_id, asset_id)
@@ -386,22 +398,23 @@ class TwistAPIAdapter(_BaseAPIAdapter[Twist, object, object]):
         return self._svc.create(entity)
 
     async def update(self, project_id: str, asset_id: str, data) -> Optional[Twist]:
-        try:
-            old = self._svc.get(asset_id)
-        except KeyError:
-            return None
-        if old.novel_id != project_id:
-            return None
-        updates = data.model_dump(exclude_unset=True)
-        updates.pop("project_id", None)
-        # forbidden_concurrent_twists arrives as list[str]; coerce to tuple to match
-        # the frozen dataclass field annotation.
-        if "forbidden_concurrent_twists" in updates and updates["forbidden_concurrent_twists"] is not None:
-            updates["forbidden_concurrent_twists"] = tuple(updates["forbidden_concurrent_twists"])
-        new = replace(old, **updates)
-        self._svc.delete(asset_id)
-        self._svc.create(new)
-        return new
+        with self._lock:
+            try:
+                old = self._svc.get(asset_id)
+            except KeyError:
+                return None
+            if old.novel_id != project_id:
+                return None
+            updates = data.model_dump(exclude_unset=True)
+            updates.pop("project_id", None)
+            # forbidden_concurrent_twists arrives as list[str]; coerce to tuple to match
+            # the frozen dataclass field annotation.
+            if "forbidden_concurrent_twists" in updates and updates["forbidden_concurrent_twists"] is not None:
+                updates["forbidden_concurrent_twists"] = tuple(updates["forbidden_concurrent_twists"])
+            new = replace(old, **updates)
+            self._svc.delete(asset_id)
+            self._svc.create(new)
+            return new
 
     async def delete(self, project_id: str, asset_id: str) -> None:
         existing = await self.get(project_id, asset_id)
@@ -452,18 +465,19 @@ class RevealAPIAdapter(_BaseAPIAdapter[Reveal, object, object]):
         return self._svc.create(entity)
 
     async def update(self, project_id: str, asset_id: str, data) -> Optional[Reveal]:
-        try:
-            old = self._svc.get(asset_id)
-        except KeyError:
-            return None
-        if old.novel_id != project_id:
-            return None
-        updates = data.model_dump(exclude_unset=True)
-        updates.pop("project_id", None)
-        new = replace(old, **updates)
-        self._svc.delete(asset_id)
-        self._svc.create(new)
-        return new
+        with self._lock:
+            try:
+                old = self._svc.get(asset_id)
+            except KeyError:
+                return None
+            if old.novel_id != project_id:
+                return None
+            updates = data.model_dump(exclude_unset=True)
+            updates.pop("project_id", None)
+            new = replace(old, **updates)
+            self._svc.delete(asset_id)
+            self._svc.create(new)
+            return new
 
     async def delete(self, project_id: str, asset_id: str) -> None:
         existing = await self.get(project_id, asset_id)
@@ -510,18 +524,19 @@ class ExpectationAPIAdapter(_BaseAPIAdapter[Expectation, object, object]):
         return self._svc.create(entity)
 
     async def update(self, project_id: str, asset_id: str, data) -> Optional[Expectation]:
-        try:
-            old = self._svc.get(asset_id)
-        except KeyError:
-            return None
-        if old.novel_id != project_id:
-            return None
-        updates = data.model_dump(exclude_unset=True)
-        updates.pop("project_id", None)
-        new = replace(old, **updates)
-        self._svc.delete(asset_id)
-        self._svc.create(new)
-        return new
+        with self._lock:
+            try:
+                old = self._svc.get(asset_id)
+            except KeyError:
+                return None
+            if old.novel_id != project_id:
+                return None
+            updates = data.model_dump(exclude_unset=True)
+            updates.pop("project_id", None)
+            new = replace(old, **updates)
+            self._svc.delete(asset_id)
+            self._svc.create(new)
+            return new
 
     async def delete(self, project_id: str, asset_id: str) -> None:
         existing = await self.get(project_id, asset_id)
@@ -570,18 +585,19 @@ class ForeshadowingAPIAdapter(_BaseAPIAdapter[Foreshadowing, object, object]):
         return self._svc.create(entity)
 
     async def update(self, project_id: str, asset_id: str, data) -> Optional[Foreshadowing]:
-        try:
-            old = self._svc.get(asset_id)
-        except KeyError:
-            return None
-        if old.novel_id != project_id:
-            return None
-        updates = data.model_dump(exclude_unset=True)
-        updates.pop("project_id", None)
-        new = replace(old, **updates)
-        self._svc.delete(asset_id)
-        self._svc.create(new)
-        return new
+        with self._lock:
+            try:
+                old = self._svc.get(asset_id)
+            except KeyError:
+                return None
+            if old.novel_id != project_id:
+                return None
+            updates = data.model_dump(exclude_unset=True)
+            updates.pop("project_id", None)
+            new = replace(old, **updates)
+            self._svc.delete(asset_id)
+            self._svc.create(new)
+            return new
 
     async def delete(self, project_id: str, asset_id: str) -> None:
         existing = await self.get(project_id, asset_id)

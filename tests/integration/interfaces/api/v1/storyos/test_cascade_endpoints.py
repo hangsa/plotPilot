@@ -12,8 +12,8 @@ def client():
     return TestClient(app)
 
 
-def test_cascade_simulate_returns_response_envelope(client):
-    """POST /cascade/simulate -> 200 + steps/summary keys present (1D stub)."""
+def test_cascade_simulate_returns_501_until_1e(client):
+    """POST /cascade/simulate -> 501 NOT_IMPLEMENTED (1D honest stub; 1E wires real cascade)."""
     resp = client.post(
         "/api/v1/storyos/proj-1/cascade/simulate",
         json={
@@ -23,10 +23,12 @@ def test_cascade_simulate_returns_response_envelope(client):
             "source_asset_id": "m-1",
         },
     )
-    assert resp.status_code == 200
+    assert resp.status_code == 501
     body = resp.json()
-    assert "steps" in body
-    assert "summary" in body
+    # 501 returns the standard error envelope
+    detail = body.get("detail") or body
+    assert detail.get("code") == "NOT_IMPLEMENTED"
+    assert "1E" in detail.get("message", "")
 
 
 def test_cascade_simulate_validates_max_depth(client):

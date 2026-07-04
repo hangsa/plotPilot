@@ -42,5 +42,5 @@ async def metrics(
         "cascade_block_rate": 0.0,
         "bridge_failure_rate": 0.0,
         "avg_cascade_depth": 0.0,
-        "force_pass_count_per_chapter": 0,
+        "force_pass_count_per_chapter": 0.0,
     }
