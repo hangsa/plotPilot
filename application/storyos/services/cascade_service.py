@@ -39,25 +39,25 @@ class CascadeService:
                 result.blocked_steps.append(step)
                 continue
             visited.add(step.target_asset_id)
-            self._apply_step(step)
-            result.steps_executed.append(step)
+            if self._apply_step(step):
+                result.steps_executed.append(step)
+            else:
+                result.blocked_steps.append(step)
         return result.model_copy(update={"max_depth_reached": len(visited)})
 
-    def _apply_step(self, step: CascadeStep) -> None:
-        # 按 target_asset_type 分发
+    def _apply_step(self, step: CascadeStep) -> bool:
         target_svc = self._get_service(step.target_asset_type)
         if target_svc is None:
-            return
-        if step.intensity_delta is not None and step.target_asset_type == "expectation":
-            try:
+            return False  # 软失败：未知 type
+        try:
+            if step.intensity_delta is not None and step.target_asset_type == "expectation":
                 target_svc.intensify(step.target_asset_id, step.intensity_delta)
-            except (KeyError, AttributeError):
-                pass
-        elif step.new_status is not None:
-            try:
+            elif step.new_status is not None:
                 target_svc.update(step.target_asset_id, status=step.new_status)
-            except (KeyError, AttributeError):
-                pass
+            return True
+        except (KeyError, AttributeError, ValueError) as e:
+            # 孤儿或非法转换 → 软失败，调用方可从 CascadeResult 推断
+            return False
 
     def _get_service(self, asset_type: str):
         return {
