@@ -1,4 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router'
+import { workbenchStoryosRoutes } from './workbench'
 
 const Home = () => import('../views/Home.vue')
 const Workbench = () => import('../views/Workbench.vue')
@@ -18,6 +19,7 @@ const router = createRouter({
     { path: '/book/:slug/chapter/:id', name: 'Chapter', component: Chapter },
     { path: '/book/:slug/characters', name: 'CharacterGraph', component: CharacterGraph },
     { path: '/book/:slug/location-graph', name: 'LocationGraph', component: LocationGraph },
+    ...workbenchStoryosRoutes,
     {
       path: '/debug/scheduler',
       name: 'CharacterSchedulerSimulator',
