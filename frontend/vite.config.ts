@@ -17,8 +17,13 @@ export default defineConfig({
         manualChunks(id) {
           if (!id.includes('node_modules')) return undefined
           if (id.includes('naive-ui')) return 'naive-ui'
+          // Order matters: vue-echarts must be checked before echarts because
+          // the former contains the latter as a substring. We want vue-echarts
+          // (storyos-specific wrapper) in storyos-vendor, not the shared
+          // echarts chunk.
+          if (id.includes('vue-echarts')) return 'storyos-vendor'
+          if (id.includes('@vue-flow')) return 'storyos-vendor'
           if (id.includes('echarts') || id.includes('zrender')) return 'echarts'
-          if (id.includes('@vue-flow') || id.includes('vue-echarts')) return 'storyos-vendor'
           if (id.includes('@vue')) return 'vue-runtime'
           return 'vendor'
         },
