@@ -3,6 +3,7 @@ import axios, { type AxiosError, type AxiosRequestConfig } from 'axios'
 import { runtimePerformance } from '../config/performance'
 import { emitAxiosFeedbackIncident } from '../support/feedbackNotifier'
 import { apiRoutes } from './endpoints'
+import { camelToSnake, snakeToCamel } from './transform'
 
 // ---------------------------------------------------------------------------
 // 单一数据源：axiosInstance.defaults.baseURL
@@ -271,8 +272,29 @@ axiosInstance.interceptors.request.use(async config => {
   return config
 })
 
+// Frontend uses camelCase fields; the backend (FastAPI / Pydantic) expects
+// snake_case. Convert request payloads at the wire boundary so application
+// code can keep its camelCase types and call sites. Runs after the
+// Tauri-ready interceptor above so the awaiting/transform pipeline is
+// consistent regardless of environment.
+axiosInstance.interceptors.request.use(config => {
+  if (config.data !== undefined && config.data !== null) {
+    config.data = camelToSnake(config.data) as unknown as typeof config.data
+  }
+  if (config.params !== undefined && config.params !== null) {
+    config.params = camelToSnake(config.params) as unknown as typeof config.params
+  }
+  return config
+})
+
 axiosInstance.interceptors.response.use(
-  response => response.data,
+  response => {
+    // Apply snake_case -> camelCase transform before unwrapping the axios
+    // envelope. Callers receive transformed payload via `apiClient.get` /
+    // `apiClient.post` etc.
+    const transformed = snakeToCamel(response.data)
+    return transformed
+  },
   err => {
     const axErr = err as AxiosError
     const cfg = axErr.config as (AxiosRequestConfig & { silentGlobalFeedback?: boolean }) | undefined
