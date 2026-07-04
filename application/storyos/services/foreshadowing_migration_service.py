@@ -60,6 +60,12 @@ class ForeshadowingMigrationService:
         self._new_writer = new_table_writer
         self._audit = audit_service
 
+    def get_audit_record(self, migration_id: str):
+        """从 audit service 查单条审计记录（API GET /status 用）。"""
+        if self._audit is None:
+            return None
+        return self._audit.get_record(migration_id)
+
     def scan(self, project_id: str) -> MigrationPreviewReport:
         """扫描旧表生成预览报告（只读，不写任何表）。"""
         # count_for_novel 在 MagicMock 下默认返回 MagicMock（不可强制转 int）；

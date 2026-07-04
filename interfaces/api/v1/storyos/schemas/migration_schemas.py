@@ -51,3 +51,13 @@ class MigrationStatusResponse(BaseModel):
     status: str = Field(min_length=1, max_length=32)
     progress_pct: float = Field(ge=0.0, le=100.0)
     eta_seconds: Optional[int] = Field(default=None, ge=0)
+
+
+class RollbackResponse(BaseModel):
+    """POST /migration/{migration_id}/rollback 响应。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    migration_id: str
+    records_deleted: int
+    status: str  # "rolled_back" | "not_found" | "already_rolled_back" | "not_committed"

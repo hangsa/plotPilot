@@ -183,3 +183,73 @@ def test_endpoints_still_in_openapi_schema(client):
     paths = schema["paths"]
     assert "/api/v1/storyos/{project_id}/migration/preview" in paths
     assert "/api/v1/storyos/{project_id}/migration/execute" in paths
+
+
+# ─── D2 Tests (GET /status + POST /rollback) ──────────────────────────
+
+
+def test_status_returns_audit_record(client, mock_migration_service):
+    """GET /migration/{migration_id}/status 返回审计记录的进度。"""
+    service = MagicMock()
+    service.get_audit_record.return_value = {
+        "migration_id": "mig-1",
+        "project_id": "proj-1",
+        "batches_total": 4,
+        "batches_done": 2,
+        "records_migrated": 100,
+        "status": "partial",
+        "errors": ["batch-0003 failed"],
+    }
+    mock_migration_service.return_value = service
+
+    resp = client.get("/api/v1/storyos/proj-1/migration/mig-1/status")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["migration_id"] == "mig-1"
+    assert body["status"] == "partial"
+    # progress_pct = 2/4 * 100 = 50
+    assert body["progress_pct"] == 50
+
+
+def test_status_404_when_migration_not_found(client, mock_migration_service):
+    service = MagicMock()
+    service.get_audit_record.return_value = None
+    mock_migration_service.return_value = service
+
+    resp = client.get("/api/v1/storyos/proj-1/migration/mig-nonexistent/status")
+    assert resp.status_code == 404
+    body = resp.json()
+    assert body["error"]["code"] == "MIGRATION_NOT_FOUND"
+
+
+def test_rollback_endpoint_calls_service(client, mock_migration_service):
+    """POST /migration/{migration_id}/rollback 回滚指定批次。"""
+    from application.storyos.services.foreshadowing_migration_service import (
+        RollbackResult,
+    )
+
+    service = MagicMock()
+    service.rollback.return_value = RollbackResult(
+        migration_id="mig-1", records_deleted=3, status="rolled_back",
+    )
+    mock_migration_service.return_value = service
+
+    resp = client.post("/api/v1/storyos/proj-1/migration/mig-1/rollback")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["records_deleted"] == 3
+    assert body["status"] == "rolled_back"
+
+
+def test_rollback_404_when_migration_not_found(client, mock_migration_service):
+    from application.storyos.services.foreshadowing_migration_service import (
+        RollbackResult,
+    )
+
+    service = MagicMock()
+    service.rollback.return_value = RollbackResult(
+        migration_id="mig-1", records_deleted=0, status="not_found",
+    )
+    mock_migration_service.return_value = service
+    resp = client.post("/api/v1/storyos/proj-1/migration/mig-1/rollback")
+    assert resp.status_code == 404
