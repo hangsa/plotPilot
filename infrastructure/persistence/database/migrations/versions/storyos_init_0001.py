@@ -1,4 +1,4 @@
-"""Alembic 迁移: 0001_storyos_init — 创建 11 张 storyos 表。
+"""Alembic 迁移: 0001_storyos_init — 创建 12 张 storyos 表。
 
 Phase 1A 直调约定 (E3 / F1):
     本模块暴露 ``upgrade(conn)`` 与 ``downgrade(conn)`` 两个普通可调用对象,
@@ -15,8 +15,10 @@ from __future__ import annotations
 
 import sqlite3
 
+from infrastructure.persistence.storyos import migration_log_schema
+
 # ---------------------------------------------------------------------------
-# 表清单 (11 张) — 模块级常量, 供 upgrade / downgrade 共用
+# 表清单 (12 张) — 模块级常量, 供 upgrade / downgrade 共用
 # ---------------------------------------------------------------------------
 
 _REGISTRY_TABLES: tuple[str, ...] = (
@@ -36,7 +38,11 @@ _AUDIT_TABLES: tuple[str, ...] = (
     "storyos_bridge_log_v1",
 )
 
-ALL_TABLES: tuple[str, ...] = _REGISTRY_TABLES + _AUDIT_TABLES
+_MIGRATION_TABLES: tuple[str, ...] = (
+    "storyos_migration_log_v1",
+)
+
+ALL_TABLES: tuple[str, ...] = _REGISTRY_TABLES + _AUDIT_TABLES + _MIGRATION_TABLES
 
 
 # ---------------------------------------------------------------------------
@@ -45,7 +51,7 @@ ALL_TABLES: tuple[str, ...] = _REGISTRY_TABLES + _AUDIT_TABLES
 
 
 def upgrade(conn: sqlite3.Connection) -> None:
-    """创建全部 11 张 storyos 表 + 索引。"""
+    """创建全部 12 张 storyos 表 + 索引。"""
     _create_conflict(conn)
     _create_mystery(conn)
     _create_twist(conn)
@@ -57,10 +63,11 @@ def upgrade(conn: sqlite3.Connection) -> None:
     _create_cascade_history(conn)
     _create_sflog_event(conn)
     _create_bridge_log(conn)
+    _create_migration_log(conn)
 
 
 def downgrade(conn: sqlite3.Connection) -> None:
-    """删除全部 11 张 storyos 表 (顺序无关)。"""
+    """删除全部 12 张 storyos 表 (顺序无关)。"""
     for table in ALL_TABLES:
         conn.execute(f"DROP TABLE IF EXISTS {table}")
     conn.commit()
@@ -425,4 +432,18 @@ def _create_bridge_log(conn: sqlite3.Connection) -> None:
         "CREATE INDEX IF NOT EXISTS ix_storyos_bridge_log_v1_chapter_id "
         "ON storyos_bridge_log_v1(chapter_id)"
     )
+    conn.commit()
+
+
+# ---------------------------------------------------------------------------
+# 1 张 migration 表
+# ---------------------------------------------------------------------------
+
+
+def _create_migration_log(conn: sqlite3.Connection) -> None:
+    """migration_log: 9 列 (id, project_id, migration_type, batch_id, old_ids, status, started_at, completed_at, error)。
+    DDL 委托给 ``migration_log_schema.CREATE_TABLE_SQL`` (含表 CREATE + 复合索引
+    ``idx_migration_log_project_type``)。供 ``MigrationLogRepository`` 在生产 migration
+    断点续跑 + 审计持久化中使用。"""
+    conn.executescript(migration_log_schema.CREATE_TABLE_SQL)
     conn.commit()

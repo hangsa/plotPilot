@@ -80,6 +80,42 @@ def test_bridge_log_table_has_no_registry_columns(tmp_path):
         conn.close()
 
 
+def test_upgrade_creates_migration_log_table(tmp_path):
+    """upgrade() 应创建 storyos_migration_log_v1 表 (fix C3)。
+
+    spec: 该表用于 migration 断点续跑 + 审计持久化,
+    MigrationLogRepository.record_committed_batch 在生产代码中会 INSERT 进去。
+    若 upgrade() 不创建该表, 第一次执行 migration 时会 crash (no such table)。
+    """
+    db_path = tmp_path / "test.db"
+    from infrastructure.persistence.database.migrations.versions import storyos_init_0001
+    conn = sqlite3.connect(str(db_path))
+    try:
+        storyos_init_0001.upgrade(conn)
+        cur = conn.execute(
+            "SELECT name FROM sqlite_master "
+            "WHERE type='table' AND name='storyos_migration_log_v1'"
+        )
+        row = cur.fetchone()
+        assert row is not None, (
+            "storyos_migration_log_v1 表未被 upgrade() 创建 — "
+            "MigrationLogRepository.record_committed_batch 会在生产中 crash"
+        )
+        # 验证列集合符合 spec
+        cur = conn.execute("PRAGMA table_info(storyos_migration_log_v1)")
+        cols = {row[1] for row in cur.fetchall()}
+        expected = {
+            "id", "project_id", "migration_type", "batch_id",
+            "old_ids", "status", "started_at", "completed_at", "error",
+        }
+        assert cols == expected, (
+            f"migration_log 列集合不符: extra={cols - expected}, "
+            f"missing={expected - cols}"
+        )
+    finally:
+        conn.close()
+
+
 def test_migration_matches_sa_schema_columns(tmp_path):
     """每个表的 DDL 列集合必须 == SQLAlchemy 声明列集合（防 schema ↔ migration 漂移）。
 
