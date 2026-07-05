@@ -38,7 +38,6 @@ from application.storyos.services.migration_audit_service import (
 )
 from application.storyos.migration.legacy_foreshadowing_adapter import (
     LegacyForeshadowingAdapter,
-    LegacyForeshadowingRecord,
 )
 from application.storyos.migration.migration_log_repository import (
     MigrationLogRepository,
@@ -91,76 +90,15 @@ class _TolerantLogRepo:
         return self._safe("mark_rolled_back", migration_id)
 
 
-class _CliLegacyAdapter:
-    """生产 CLI 专用 legacy adapter：把 ``LegacyForeshadowingAdapter`` 的
-    无参 execute 包装成正确参数化的查询。
-
-    原 adapter 的 ``_resolve_cursor`` 走 ``target.execute(sql)``（不带 ?），
-    但 SELECT/COUNT SQL 含 ``WHERE novel_id = ?`` —— 直接调用会让 SQLite
-    报 "Incorrect number of bindings"。这里提供一个 cursor provider 包装，
-    在 cursor 上预绑定 ``novel_id``，让 adapter 的二次 execute 自动通过。
-    """
-
-    def __init__(self, conn_provider) -> None:
-        self._conn_provider = conn_provider
-
-    def _make_cursor(self, novel_id):
-        """创建已绑定 novel_id 的伪 cursor。"""
-        class _BoundCursor:
-            def __init__(self, conn, novel_id):
-                self._conn = conn
-                self._novel_id = novel_id
-
-            def execute(self, sql, params=()):
-                # adapter 调用 execute(sql) 时，params 默认空元组
-                # 这里强制覆盖为 (novel_id,)
-                if not params:
-                    params = (self._novel_id,)
-                self._cursor = self._conn.execute(sql, params)
-                return self._cursor
-
-            def fetchone(self):
-                return self._cursor.fetchone()
-
-            def fetchall(self):
-                return self._cursor.fetchall()
-
-        return _BoundCursor(self._conn_provider(), novel_id)
-
-    def fetch_all_with_invalid(self, project_id, cursor=None):
-        """委托给原 adapter，但传入已绑定 novel_id 的 cursor。"""
-        if cursor is not None:
-            cursor.execute(LegacyForeshadowingAdapter._SELECT_ALL_SQL)
-            rows = cursor.fetchall()
-        else:
-            cursor = self._make_cursor(project_id)
-            cursor.execute(LegacyForeshadowingAdapter._SELECT_ALL_SQL)
-            rows = cursor.fetchall()
-        records = []
-        invalid_ids = []
-        for row in rows:
-            try:
-                records.append(LegacyForeshadowingAdapter._row_to_record(row))
-            except (ValueError, TypeError):
-                invalid_ids.append(row[0])
-        return records, invalid_ids
-
-    def count_for_novel(self, project_id, cursor=None):
-        if cursor is not None:
-            cursor.execute(LegacyForeshadowingAdapter._COUNT_SQL)
-            row = cursor.fetchone()
-        else:
-            cursor = self._make_cursor(project_id)
-            cursor.execute(LegacyForeshadowingAdapter._COUNT_SQL)
-            row = cursor.fetchone()
-        return int(row[0]) if row else 0
-
-
 def _build_service(args) -> ForeshadowingMigrationService:
     """构造 MigrationService（CLI 模式下默认使用主数据库）。
 
     DB 不可用时返回空 service（容错：让 CLI 在生产环境 DB 损坏时仍能输出
     空 JSON 报告，便于运维诊断）。
+
+    ``LegacyForeshadowingAdapter`` 直接消费生产接口（spec C4 已修复
+    ``_resolve_cursor`` 的参数绑定），cursor_provider 每次调用新开连接——
+    CLI 是 one-shot 工具，无连接池需求。
     """
     try:
         db = get_database()
@@ -168,7 +106,11 @@ def _build_service(args) -> ForeshadowingMigrationService:
         def conn_provider():
             return db.get_connection()
 
-        legacy = _CliLegacyAdapter(conn_provider=conn_provider)
+        def legacy_cursor_provider(sql, params):
+            conn = conn_provider()
+            return conn.execute(sql, params)
+
+        legacy = LegacyForeshadowingAdapter(cursor_provider=legacy_cursor_provider)
         log_repo = _TolerantLogRepo(MigrationLogRepository(db_provider=conn_provider))
         new_writer = NewForeshadowingWriter()
         audit = MigrationAuditService()

@@ -16,8 +16,8 @@
 - 这里在临时 SQLite 上手工建 3 张表，用 ``conn_provider`` lambda 直接拿到
   ``sqlite3.Connection``，并把 ``enqueue_txn_batch`` monkey-patch 成"直接
   在同一连接上按顺序执行 INSERT/UPDATE/DELETE"。
-- legacy adapter 走 ``_TestLegacyAdapter``（参考生产 CLI 的
-  ``_CliLegacyAdapter``），把 ``WHERE novel_id = ?`` 参数预绑定。
+- legacy adapter 走生产版 ``LegacyForeshadowingAdapter``，cursor_provider
+  闭包转发到临时 sqlite3 连接，验证 spec C4 修复后端到端可用。
 """
 from __future__ import annotations
 
@@ -26,7 +26,7 @@ import os
 import sqlite3
 import tempfile
 import threading
-from typing import Any, Callable, List, Optional, Set, Tuple
+from typing import Any, Callable, List, Optional, Set
 
 import pytest
 
@@ -139,46 +139,6 @@ def _conn_provider(path: str) -> Callable[[], sqlite3.Connection]:
         return _shared
 
     return _open
-
-
-# ---------------------------------------------------------------------------
-# ``_TestLegacyAdapter`` —— 真实 SQLite adapter，正确处理 ``WHERE novel_id = ?``
-# ---------------------------------------------------------------------------
-
-
-class _TestLegacyAdapter(LegacyForeshadowingAdapter):
-    """Production-grade adapter：每次 ``fetch_*`` / ``count_*`` 新开连接，
-    预绑定 ``novel_id``。覆盖父类 ``_resolve_cursor`` 的默认实现：父类接受
-    ``cursor_provider(sql)`` 但对参数化查询无能为力；这里直接吃 project_id
-    参数并在内部做完 prepare/execute。
-    """
-
-    def __init__(self, conn_provider: Callable[[], sqlite3.Connection]) -> None:
-        super().__init__(cursor_provider=lambda sql: None)
-        self._conn_provider = conn_provider
-
-    def fetch_all_with_invalid(
-        self, novel_id: str, cursor: Optional[Any] = None,
-    ) -> Tuple[List[LegacyForeshadowingRecord], List[str]]:
-        del cursor  # unused in this path
-        conn = self._conn_provider()
-        rows = conn.execute(self._SELECT_ALL_SQL, (novel_id,)).fetchall()
-        records: List[LegacyForeshadowingRecord] = []
-        invalid_ids: List[str] = []
-        for row in rows:
-            try:
-                records.append(self._row_to_record(row))
-            except (ValueError, TypeError):
-                invalid_ids.append(row[0])
-        return records, invalid_ids
-
-    def count_for_novel(
-        self, novel_id: str, cursor: Optional[Any] = None,
-    ) -> int:
-        del cursor
-        conn = self._conn_provider()
-        row = conn.execute(self._COUNT_SQL, (novel_id,)).fetchone()
-        return int(row[0]) if row else 0
 
 
 # ---------------------------------------------------------------------------
@@ -385,7 +345,13 @@ def _build_service(db_path: str, monkeypatch) -> ForeshadowingMigrationService:
         lambda ops: True,
     )
 
-    legacy = _TestLegacyAdapter(conn_provider=conn_provider)
+    # 生产版 LegacyForeshadowingAdapter，cursor_provider 转发到临时
+    # sqlite3 连接；每次取数开新连接，sqlite3 cursor 自带 execute 后的状态。
+    def legacy_cursor_provider(sql, params):
+        conn = conn_provider()
+        return conn.execute(sql, params)
+
+    legacy = LegacyForeshadowingAdapter(cursor_provider=legacy_cursor_provider)
     log_repo = _TestMigrationLogRepository(conn_provider=conn_provider)
     new_writer = _TestNewForeshadowingWriter(conn_provider=conn_provider)
     audit = MigrationAuditService()

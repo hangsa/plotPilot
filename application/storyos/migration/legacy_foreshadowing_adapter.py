@@ -30,21 +30,26 @@ class LegacyForeshadowingRecord:
     subtext_type: Optional[str]
 
 
-CursorProvider = Callable[[str], Any]
+CursorProvider = Callable[[str, tuple], Any]
 
 
 class LegacyForeshadowingAdapter:
     """旧表只读 adapter（spec Q8）。
 
     cursor_provider 是注入依赖，方便测试 mock；生产环境传入
-    `lambda sql: sqlite_connection.execute(sql)`。
-    所有方法的 SQL 都通过 ``cursor.execute(SQL)`` 触发，
+    ``lambda sql, params: sqlite_connection.execute(sql, params)``。
+    所有方法的 SQL 都通过 ``cursor.execute(SQL, params)`` 触发，
     便于测试侧断言"未触发 INSERT/UPDATE/DELETE/REPLACE/DROP"。
+
+    ``novel_id`` 始终通过 ``params`` 占位符绑定（``WHERE novel_id = ?``），
+    严禁字符串拼接到 SQL 中——避免注入风险并与 spec Q8 "只读 adapter"
+    的可审计性保持一致。
     """
 
     _FORBIDDEN_SQL_KEYWORDS = frozenset(["INSERT", "UPDATE", "DELETE", "REPLACE", "DROP"])
 
     # 9 列 SELECT —— 字段顺序与 schema.sql:537-550 完全对齐。
+    # ``novel_id`` 由调用方以 params 形式绑定（见 ``_resolve_cursor``）。
     _SELECT_ALL_SQL = (
         "SELECT id, novel_id, description, planted_chapter, due_chapter, "
         "resolved_chapter, status, importance, subtext_type "
@@ -56,18 +61,24 @@ class LegacyForeshadowingAdapter:
         self._cursor_provider = cursor_provider
 
     def _resolve_cursor(
-        self, sql: str, cursor: Optional[Any] = None,
+        self,
+        sql: str,
+        params: tuple = (),
+        cursor: Optional[Any] = None,
     ) -> Any:
         """获取 cursor：优先用调用方注入的（用于测试断言），否则走 cursor_provider。
 
-        无论哪条路径，SQL 都会经过 ``cursor.execute(SQL)`` —— 测试可通过 mock
-        ``cursor.execute`` 拦截真实 SQL 字符串。
+        无论哪条路径，``params`` 都会绑定到 SQL 占位符上：
+        - 注入 cursor：调用 ``target.execute(sql, params)``，无 params 时也带空元组，
+          与 sqlite3 的 ``execute(sql)`` 语义一致。
+        - cursor_provider：调用方提供的 provider 接收 ``(sql, params)`` 并返回已
+          execute 过的 cursor；这里**不再**对其返回对象调用 execute。
         """
         if cursor is not None:
             target = cursor
+            target.execute(sql, params)
         else:
-            target = self._cursor_provider(sql)
-        target.execute(sql)
+            target = self._cursor_provider(sql, params)
         return target
 
     def fetch_all_for_novel(
@@ -83,11 +94,14 @@ class LegacyForeshadowingAdapter:
 
         ``cursor`` 是测试注入点（optional）：传入时直接调用其 ``execute`` 拦截 SQL，
         否则走构造期注入的 ``cursor_provider``。
+        ``novel_id`` 以占位符 ``?`` 的形式绑定，不参与字符串拼接。
 
         Returns:
             (records, invalid_ids): records 是合法行，invalid_ids 是损坏行 ID 列表。
         """
-        target = self._resolve_cursor(self._SELECT_ALL_SQL, cursor=cursor)
+        target = self._resolve_cursor(
+            self._SELECT_ALL_SQL, params=(novel_id,), cursor=cursor,
+        )
         # cursor 期望支持参数化查询
         rows = target.fetchall()
         records: List[LegacyForeshadowingRecord] = []
@@ -102,7 +116,9 @@ class LegacyForeshadowingAdapter:
     def count_for_novel(
         self, novel_id: str, cursor: Optional[Any] = None,
     ) -> int:
-        target = self._resolve_cursor(self._COUNT_SQL, cursor=cursor)
+        target = self._resolve_cursor(
+            self._COUNT_SQL, params=(novel_id,), cursor=cursor,
+        )
         row = target.fetchone()
         return int(row[0]) if row else 0
 
