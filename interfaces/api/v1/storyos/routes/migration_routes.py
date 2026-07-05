@@ -95,14 +95,14 @@ async def migration_status(
             detail={"code": "MIGRATION_NOT_FOUND", "message": f"migration {migration_id} not found"},
         )
     progress_pct = (
-        int(record["batches_done"] / record["batches_total"] * 100)
-        if record["batches_total"] > 0 else 0
+        int(record.batches_done / record.batches_total * 100)
+        if record.batches_total > 0 else 0
     )
     # ETA 粗略估算：剩余 batches * 平均每批 200ms
-    eta_seconds = int((record["batches_total"] - record["batches_done"]) * 0.2)
+    eta_seconds = int((record.batches_total - record.batches_done) * 0.2)
     return MigrationStatusResponse(
         migration_id=migration_id,
-        status=record["status"],
+        status=record.status,
         progress_pct=progress_pct,
         eta_seconds=eta_seconds,
     )

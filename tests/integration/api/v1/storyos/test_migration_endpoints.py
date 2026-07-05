@@ -189,17 +189,28 @@ def test_endpoints_still_in_openapi_schema(client):
 
 
 def test_status_returns_audit_record(client, mock_migration_service):
-    """GET /migration/{migration_id}/status 返回审计记录的进度。"""
+    """GET /migration/{migration_id}/status 返回审计记录的进度。
+
+    Verify attribute-style access works against a real
+    :class:`MigrationAuditRecord` dataclass (not dict-shaped mock).
+    Regression guard for the post-C1 dict-vs-attr fix.
+    """
+    from application.storyos.services.migration_audit_service import (
+        MigrationAuditRecord,
+    )
+
     service = MagicMock()
-    service.get_audit_record.return_value = {
-        "migration_id": "mig-1",
-        "project_id": "proj-1",
-        "batches_total": 4,
-        "batches_done": 2,
-        "records_migrated": 100,
-        "status": "partial",
-        "errors": ["batch-0003 failed"],
-    }
+    service.get_audit_record.return_value = MigrationAuditRecord(
+        migration_id="mig-1",
+        project_id="proj-1",
+        batches_total=4,
+        batches_done=2,
+        records_migrated=100,
+        duration_ms=0,
+        status="partial",
+        errors=["batch-0003 failed"],
+        started_at="2026-01-01T00:00:00",
+    )
     mock_migration_service.return_value = service
 
     resp = client.get("/api/v1/storyos/proj-1/migration/mig-1/status")
