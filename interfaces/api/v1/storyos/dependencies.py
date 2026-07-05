@@ -15,7 +15,13 @@ from application.storyos.services.expectation_registry_service import (
 from application.storyos.services.foreshadowing_registry_service import (
     ForeshadowingRegistryService,
 )
+from application.storyos.services.foreshadowing_migration_service import (
+    ForeshadowingMigrationService,
+)
 from application.storyos.services.goal_registry_service import GoalRegistryService
+from application.storyos.services.migration_audit_service import (
+    MigrationAuditService,
+)
 from application.storyos.services.mystery_registry_service import (
     MysteryRegistryService,
 )
@@ -29,6 +35,16 @@ from application.storyos.services.reveal_registry_service import (
 from application.storyos.services.twist_registry_service import (
     TwistRegistryService,
 )
+from application.storyos.migration.legacy_foreshadowing_adapter import (
+    LegacyForeshadowingAdapter,
+)
+from application.storyos.migration.migration_log_repository import (
+    MigrationLogRepository,
+)
+from application.storyos.migration.new_foreshadowing_writer import (
+    NewForeshadowingWriter,
+)
+from infrastructure.persistence.database.connection import get_database
 from domain.storyos.entities.conflict import Conflict, ConflictIntensity
 from domain.storyos.entities.expectation import Expectation
 from domain.storyos.entities.foreshadowing import Foreshadowing
@@ -805,9 +821,59 @@ async def get_sflog_service() -> None:
     return None
 
 
-async def get_migration_service() -> None:
-    """C3 1D stub: real ForeshadowingMigrationService wiring lands in 1E."""
-    return None
+# Migration service singleton (C1 fix - 1E 联通 real implementation).
+_migration_service: Optional[ForeshadowingMigrationService] = None
+
+
+def _new_migration_service() -> ForeshadowingMigrationService:
+    """Construct a fully-wired ``ForeshadowingMigrationService``.
+
+    Mirrors the CLI's ``_build_service`` wiring (see ``scripts/migrate_storyos.py``):
+    the legacy adapter reads ``foreshadows`` (read-only, spec Q8), the log
+    repository persists ``storyos_migration_log_v1``, the new-table writer
+    handles INSERTs through ``WriteDispatch``, and the audit service is
+    process-local.
+
+    No graceful-degradation fallback — if the database is unreachable the
+    factory fails loudly. Long-lived API servers should fail-fast on
+    misconfiguration instead of returning empty reports.
+    """
+    db = get_database()
+
+    def db_provider():
+        return db.get_connection()
+
+    def cursor_provider(sql, params):
+        return db.get_connection().execute(sql, params)
+
+    legacy = LegacyForeshadowingAdapter(cursor_provider=cursor_provider)
+    log_repo = MigrationLogRepository(db_provider=db_provider)
+    new_writer = NewForeshadowingWriter()
+    audit = MigrationAuditService()
+    return ForeshadowingMigrationService(
+        legacy_adapter=legacy,
+        log_repository=log_repo,
+        new_table_writer=new_writer,
+        audit_service=audit,
+    )
+
+
+def _get_migration_service() -> ForeshadowingMigrationService:
+    global _migration_service
+    if _migration_service is None:
+        _migration_service = _new_migration_service()
+    return _migration_service
+
+
+def reset_migration_service() -> None:
+    """Test hook: clear migration service singleton (forces rewire on next request)."""
+    global _migration_service
+    _migration_service = None
+
+
+async def get_migration_service() -> ForeshadowingMigrationService:
+    """E1 1E DI factory: returns ForeshadowingMigrationService singleton."""
+    return _get_migration_service()
 
 
 async def get_health_service() -> None:
