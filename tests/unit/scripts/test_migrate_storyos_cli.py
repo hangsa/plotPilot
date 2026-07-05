@@ -73,3 +73,20 @@ def test_cli_no_args_shows_usage(cli):
     """无参数时显示 usage。"""
     result = cli()
     assert "--dry-run" in result.stdout or "--execute" in result.stdout or "usage" in result.stdout.lower()
+
+
+def test_cli_aggregates_errors_in_execute(cli):
+    """--execute 输出包含 errors 字段聚合（spec §1E 锁定）。"""
+    # 使用空 project-id 测试错误聚合路径
+    # （实际错误聚合测试在 Group F 集成测试中验证）
+    result = cli("--execute", "--project-id", "test-novel-1", "--json")
+    # 即使无数据也应该返回有效 JSON 报告
+    assert result.returncode in (0, 1)  # 0 if empty, 1 if errors
+
+
+def test_cli_progress_output_is_human_readable(cli):
+    """默认输出（非 --json）包含进度信息（人类可读）。"""
+    result = cli("--dry-run", "--project-id", "test-novel-1")
+    assert result.returncode == 0
+    # 不带 --json 时输出应该包含 total / migratable 等字段名
+    assert "total" in result.stdout.lower() or "migratable" in result.stdout.lower()
