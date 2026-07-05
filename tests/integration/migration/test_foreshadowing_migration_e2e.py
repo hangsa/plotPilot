@@ -13,9 +13,12 @@
 实现说明：
 - 测试不走 ``enqueue_txn_batch`` / ``get_database()``，因为二者依赖全局
   persistence queue + 已应用 schema 的全局 DB。
-- 这里在临时 SQLite 上手工建 3 张表，用 ``conn_provider`` lambda 直接拿到
-  ``sqlite3.Connection``，并把 ``enqueue_txn_batch`` monkey-patch 成"直接
-  在同一连接上按顺序执行 INSERT/UPDATE/DELETE"。
+- 这里在临时 SQLite 上调用生产版 ``storyos_init_0001.upgrade()`` 创建
+  storyos_foreshadowing_v1 + 索引 + UNIQUE 约束（fix C2 锁定：测试 schema
+  与生产 DDL 必须完全一致，否则 writer 用错列名漂移也不会被发现）。
+- 用 ``conn_provider`` lambda 直接拿到 ``sqlite3.Connection``，并把
+  ``enqueue_txn_batch`` monkey-patch 成"直接在同一连接上按顺序执行
+  INSERT/UPDATE/DELETE"。
 - legacy adapter 走生产版 ``LegacyForeshadowingAdapter``，cursor_provider
   闭包转发到临时 sqlite3 连接，验证 spec C4 修复后端到端可用。
 """
@@ -43,7 +46,7 @@ from application.storyos.migration.legacy_foreshadowing_adapter import (
 
 
 # ---------------------------------------------------------------------------
-# temp_db fixture + helpers
+# temp_db fixture + helpers (fix C2: e2e schema must mirror production DDL)
 # ---------------------------------------------------------------------------
 
 
@@ -58,25 +61,21 @@ CREATE TABLE foreshadows (
 );
 """
 
-_NEW_SCHEMA = """
-CREATE TABLE storyos_foreshadowing_v1 (
-    id TEXT PRIMARY KEY, project_id TEXT NOT NULL,
-    asset_type TEXT NOT NULL, status TEXT NOT NULL,
-    description TEXT NOT NULL, importance INTEGER NOT NULL,
-    planted_chapter INTEGER NOT NULL, payoff_chapter INTEGER,
-    resolved_chapter INTEGER, migrated_from_legacy_id TEXT,
-    created_at TEXT NOT NULL,
-    UNIQUE(migrated_from_legacy_id, project_id)
-);
-"""
-
+# migration_log schema 来自 production migration_log_schema.CREATE_TABLE_SQL
 _LOG_SCHEMA = """
-CREATE TABLE storyos_migration_log_v1 (
-    id TEXT PRIMARY KEY, project_id TEXT NOT NULL,
-    migration_type TEXT NOT NULL, batch_id TEXT NOT NULL,
-    old_ids TEXT NOT NULL, status TEXT NOT NULL,
-    started_at TEXT NOT NULL, completed_at TEXT, error TEXT
+CREATE TABLE IF NOT EXISTS storyos_migration_log_v1 (
+    id TEXT PRIMARY KEY,
+    project_id TEXT NOT NULL,
+    migration_type TEXT NOT NULL,
+    batch_id TEXT NOT NULL,
+    old_ids TEXT NOT NULL,
+    status TEXT NOT NULL,
+    started_at TEXT NOT NULL,
+    completed_at TEXT,
+    error TEXT
 );
+CREATE INDEX IF NOT EXISTS idx_migration_log_project_type
+    ON storyos_migration_log_v1(project_id, migration_type, status);
 """
 
 
@@ -85,12 +84,22 @@ def temp_db():
     """创建临时 SQLite（带 foreshadows / storyos_foreshadowing_v1 / log 表）。
 
     Returns the path. The fixture writes teardown to ``os.unlink``.
+
+    fix C2: production schema (``storyos_init_0001.upgrade()``) is applied
+    verbatim to the temp DB — not a hand-rolled fictional schema. This
+    prevents the writer's column drift from going undetected.
     """
     fd, path = tempfile.mkstemp(suffix=".db")
     os.close(fd)
     conn = sqlite3.connect(path)
-    conn.executescript(_LEGACY_SCHEMA + _NEW_SCHEMA + _LOG_SCHEMA)
+    # 旧表 + log 表手工建（生产 migration 不管这两张）；
+    # 新表走生产 upgrade() 拿真实的 DDL。
+    from infrastructure.persistence.database.migrations.versions import (
+        storyos_init_0001,
+    )
+    conn.executescript(_LEGACY_SCHEMA + _LOG_SCHEMA)
     conn.commit()
+    storyos_init_0001.upgrade(conn)
     conn.close()
     yield path
     try:
@@ -261,16 +270,21 @@ class _TestMigrationLogRepository:
 
 
 class _TestNewForeshadowingWriter:
-    """``NewForeshadowingWriter`` 的 sqlite3 直连版本（不走 dispatch）。"""
+    """``NewForeshadowingWriter`` 的 sqlite3 直连版本（不走 dispatch）。
+
+    fix C2: SQL 列名 / 顺序与生产 writer 完全一致, 这样本测试的 schema
+    (生产 upgrade()) 与 writer (本类 SQL) 任意一方漂移都会立刻报错。
+    """
 
     def __init__(self, conn_provider: Callable[[], sqlite3.Connection]) -> None:
         self._db_provider = conn_provider
         self._insert_sql = (
             "INSERT OR IGNORE INTO storyos_foreshadowing_v1 "
-            "(id, project_id, asset_type, status, description, "
-            "importance, planted_chapter, payoff_chapter, resolved_chapter, "
-            "migrated_from_legacy_id, created_at) "
-            "VALUES (?, ?, 'foreshadowing', ?, ?, ?, ?, ?, ?, ?, ?)"
+            "(id, project_id, created_chapter, status, description, "
+            "linked_assets, cascade_updated_at, importance, "
+            "planted_in_chapter, suggested_resolve_chapter, resolved_in_chapter, "
+            "migrated_from_legacy_id) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
         )
 
     def insert_batch(
@@ -283,12 +297,18 @@ class _TestNewForeshadowingWriter:
             db.execute(
                 self._insert_sql,
                 (
-                    f"mig-{rec.id}", rec.novel_id,
-                    new_status.value if hasattr(new_status, "value") else str(new_status),
-                    rec.description, rec.importance,
-                    rec.planted_chapter, rec.due_chapter,
-                    rec.resolved_chapter, rec.id,
-                    "2026-07-03T10:00:00",
+                    f"mig-{rec.id}",                          # id
+                    rec.novel_id,                             # project_id
+                    rec.planted_chapter,                      # created_chapter
+                    new_status.value if hasattr(new_status, "value") else str(new_status),  # status
+                    rec.description,                          # description
+                    "{}",                                     # linked_assets
+                    None,                                     # cascade_updated_at
+                    str(rec.importance),                      # importance TEXT
+                    rec.planted_chapter,                      # planted_in_chapter
+                    rec.due_chapter,                          # suggested_resolve_chapter
+                    rec.resolved_chapter,                     # resolved_in_chapter
+                    rec.id,                                   # migrated_from_legacy_id
                 ),
             )
         db.commit()

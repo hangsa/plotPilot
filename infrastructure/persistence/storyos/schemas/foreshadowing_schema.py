@@ -16,3 +16,6 @@ class ForeshadowingSchema(BaseRegistrySchema, Base):
     planted_in_chapter: Mapped[int] = mapped_column(Integer)
     suggested_resolve_chapter: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     resolved_in_chapter: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    migrated_from_legacy_id: Mapped[Optional[str]] = mapped_column(
+        String, nullable=True
+    )

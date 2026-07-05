@@ -15,38 +15,26 @@ import pytest
 from tests.integration.migration.test_foreshadowing_migration_e2e import (
     _populate_legacy,
     _build_service,
+    _LEGACY_SCHEMA,
+    _LOG_SCHEMA,
 )
 
 
 def _create_temp_db_with_schema() -> str:
-    """创建含 3 张表的临时 SQLite，返回 path。"""
+    """创建含 3 张表的临时 SQLite，返回 path。
+
+    fix C2: 新表走生产 ``storyos_init_0001.upgrade()`` 而不是手写 fictional
+    schema，确保 perf 基准跑在真实的 DDL + 索引 + UNIQUE 约束上。
+    """
     fd, path = tempfile.mkstemp(suffix=".db")
     os.close(fd)
     conn = sqlite3.connect(path)
-    conn.executescript("""
-        CREATE TABLE foreshadows (
-            id TEXT PRIMARY KEY, novel_id TEXT NOT NULL,
-            description TEXT NOT NULL, planted_chapter INTEGER NOT NULL,
-            due_chapter INTEGER, resolved_chapter INTEGER,
-            status TEXT NOT NULL DEFAULT 'planted',
-            importance INTEGER NOT NULL DEFAULT 2, subtext_type TEXT
-        );
-        CREATE TABLE storyos_foreshadowing_v1 (
-            id TEXT PRIMARY KEY, project_id TEXT NOT NULL,
-            asset_type TEXT NOT NULL, status TEXT NOT NULL,
-            description TEXT NOT NULL, importance INTEGER NOT NULL,
-            planted_chapter INTEGER NOT NULL, payoff_chapter INTEGER,
-            resolved_chapter INTEGER, migrated_from_legacy_id TEXT,
-            created_at TEXT NOT NULL,
-            UNIQUE(migrated_from_legacy_id, project_id)
-        );
-        CREATE TABLE storyos_migration_log_v1 (
-            id TEXT PRIMARY KEY, project_id TEXT NOT NULL,
-            migration_type TEXT NOT NULL, batch_id TEXT NOT NULL,
-            old_ids TEXT NOT NULL, status TEXT NOT NULL,
-            started_at TEXT NOT NULL, completed_at TEXT, error TEXT
-        );
-    """)
+    from infrastructure.persistence.database.migrations.versions import (
+        storyos_init_0001,
+    )
+    conn.executescript(_LEGACY_SCHEMA + _LOG_SCHEMA)
+    conn.commit()
+    storyos_init_0001.upgrade(conn)
     conn.close()
     return path
 

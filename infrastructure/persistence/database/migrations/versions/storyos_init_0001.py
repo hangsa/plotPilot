@@ -299,7 +299,9 @@ def _create_foreshadowing(conn: sqlite3.Connection) -> None:
             importance TEXT NOT NULL,
             planted_in_chapter INTEGER NOT NULL,
             suggested_resolve_chapter INTEGER,
-            resolved_in_chapter INTEGER
+            resolved_in_chapter INTEGER,
+            migrated_from_legacy_id TEXT,
+            UNIQUE(project_id, migrated_from_legacy_id)
         )
         """
     )
@@ -310,6 +312,11 @@ def _create_foreshadowing(conn: sqlite3.Connection) -> None:
     conn.execute(
         "CREATE INDEX IF NOT EXISTS ix_storyos_foreshadowing_v1_status "
         "ON storyos_foreshadowing_v1(status)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS ix_storyos_foreshadowing_v1_migrated_id "
+        "ON storyos_foreshadowing_v1(project_id, migrated_from_legacy_id) "
+        "WHERE migrated_from_legacy_id IS NOT NULL"
     )
     conn.commit()
 
