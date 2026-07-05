@@ -153,6 +153,10 @@ class ForeshadowingMigrationService:
             batch_end = batch_start + batch_size
             batch = migratable_pairs[batch_start:batch_end]
             batch_id = f"batch-{batch_idx:04d}"
+            # migration_log row id 必须是唯一的；把 run 级 migration_id 与
+            # batch_id 复合，避免多批次写入时主键冲突。这样 rollback
+            # 通过该复合 id 单批回滚（spec §1E 锁定）。
+            batch_migration_id = f"{migration_id}::{batch_id}"
             old_ids = [r.id for r, _ in batch]
 
             try:
@@ -162,7 +166,7 @@ class ForeshadowingMigrationService:
                 )
                 completed_at = datetime.utcnow().isoformat()
                 self._log_repo.record_committed_batch(
-                    migration_id=migration_id,
+                    migration_id=batch_migration_id,
                     project_id=project_id,
                     batch_id=batch_id,
                     old_ids=old_ids,
@@ -176,7 +180,7 @@ class ForeshadowingMigrationService:
                 logger.warning("[migration] %s", error_msg)
                 errors.append(error_msg)
                 self._log_repo.record_failed_batch(
-                    migration_id=migration_id,
+                    migration_id=batch_migration_id,
                     project_id=project_id,
                     batch_id=batch_id,
                     old_ids=old_ids,
