@@ -98,12 +98,20 @@ class Worldbuilding:
 
     def _dimension_from_document_or_scalar_projection(self, key: str) -> Dict[str, str]:
         block = self.dimensions.get(key) if isinstance(self.dimensions, dict) else None
-        if isinstance(block, dict) and any(str(v).strip() for v in block.values()):
-            return {str(k): str(v or "") for k, v in block.items()}
-        return {
-            field_key: str(getattr(self, field_key, "") or "")
-            for field_key in _dimension_field_keys().get(key, ())
-        }
+        out: Dict[str, str] = {}
+        if isinstance(block, dict):
+            out = {str(k): str(v or "") for k, v in block.items()}
+        # JSON is the primary source, but schema fields missing or empty
+        # there must fall back to the scalar column — otherwise an LLM
+        # output that omits a key (or write-path degradation that drops
+        # it) would make the field disappear from reads even when the
+        # legacy column still has the value. Downstream projection
+        # (project_slices_to_contract_api_shape) still filters
+        # non-schema keys, so this merge is safe.
+        for field_key in _dimension_field_keys().get(key, ()):
+            if not str(out.get(field_key, "")).strip():
+                out[field_key] = str(getattr(self, field_key, "") or "")
+        return out
 
     def normalized_dimensions(self) -> Dict[str, Dict[str, str]]:
         return {
