@@ -42,6 +42,27 @@ export function worldbuildingFieldTitle(_dim: WorldbuildingDimKey, field: string
   return getWorldbuildingFieldLabel(field)
 }
 
+function toCamelCase(snake: string): string {
+  return snake.replace(/_([a-z0-9])/g, (_match, ch: string) => ch.toUpperCase())
+}
+
+function toSnakeCase(camel: string): string {
+  return camel.replace(/[A-Z]/g, ch => `_${ch.toLowerCase()}`)
+}
+
+function lookupRawBlock(raw: Record<string, unknown>, dim: string): unknown {
+  if (raw[dim] !== undefined) return raw[dim]
+  const camel = toCamelCase(dim)
+  if (camel !== dim && raw[camel] !== undefined) return raw[camel]
+  return undefined
+}
+
+function resolveCanonicalField(dim: WorldbuildingDimKey, key: string): string {
+  const direct = canonicalWorldbuildingField(dim, key)
+  if (direct) return direct
+  return canonicalWorldbuildingField(dim, toSnakeCase(key))
+}
+
 export function orderedWorldbuildingFields(
   data: WorldbuildingDraftShape,
   dim: WorldbuildingDimKey,
@@ -78,14 +99,14 @@ export function mergeWorldbuildingRawBlocks(
   raw: Record<string, unknown>,
 ) {
   for (const dim of WB_DIMS) {
-    const block = raw[dim]
+    const block = lookupRawBlock(raw, dim)
     if (typeof block === 'string') continue
     if (block && typeof block === 'object') {
       const normalized: Record<string, string> = {}
       for (const [key, value] of Object.entries(block as Record<string, unknown>)) {
         const text = String(value ?? '').trim()
         if (!text) continue
-        const field = canonicalWorldbuildingField(dim, key)
+        const field = resolveCanonicalField(dim, key)
         if (!field) continue
         normalized[field] = text
       }
