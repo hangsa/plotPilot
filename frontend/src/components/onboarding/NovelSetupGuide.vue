@@ -127,6 +127,20 @@
             请查看并修改文风公约和世界观设定，确认后下一步将基于此生成人物和地点。
           </n-alert>
 
+          <n-alert
+            v-if="worldbuildingWarnings.length"
+            type="warning"
+            :title="`部分维度未完整生成（${worldbuildingWarnings.length} 项）`"
+            style="margin-bottom: 16px"
+          >
+            <template #header>
+              部分维度未完整生成（{{ worldbuildingWarnings.length }} 项），可手动补全或点「重新生成」
+            </template>
+            <ul class="wizard-warning-list">
+              <li v-for="(msg, idx) in worldbuildingWarnings" :key="idx">{{ msg }}</li>
+            </ul>
+          </n-alert>
+
           <n-collapse :default-expanded-names="['style', 'worldbuilding']">
             <n-collapse-item title="文风公约" name="style">
               <n-card size="small">
@@ -830,7 +844,8 @@ function applyWorldbuildingBoundOutputs(record: Record<string, unknown>, binding
   const content = byVariableKey['worldbuilding.content']
   if (content !== undefined) boundRecord.worldbuilding = content
   for (const dim of WB_DIMS) {
-    const value = byVariableKey[`worldbuilding.${dim}`]
+    const camelKey = dim.includes('_') ? dim.replace(/_([a-z0-9])/g, (_match, ch: string) => ch.toUpperCase()) : dim
+    const value = byVariableKey[`worldbuilding.${camelKey}`]
     if (value !== undefined) boundRecord[dim] = value
   }
   if (Object.keys(boundRecord).length) applyWorldbuildingRecord(boundRecord)
@@ -844,8 +859,38 @@ function applyBibleInvocationPreview(stage: 'worldbuilding' | 'characters' | 'lo
   applyWorldbuildingRecord(record)
   applyWorldbuildingBoundOutputs(
     record,
-    payload.session?.output_bindings || payload.session?.variable_plan?.bindings || [],
+    payload.session?.outputBindings || payload.session?.variablePlan?.bindings || [],
   )
+}
+
+/** 从 commit 结果中提取 bible_worldbuilding handler 的 warnings（兼容 result.continuation 与 steps 两种结构） */
+function extractWorldbuildingWarnings(payload: InvocationResponseDTO): string[] {
+  const commit = payload.commit
+  if (!commit) return []
+  const candidates: unknown[] = []
+  const commitResult = commit.result || {}
+  if (commitResult && typeof commitResult === 'object') {
+    const continuation = (commitResult as Record<string, unknown>).continuation
+    if (continuation && typeof continuation === 'object') {
+      const w = (continuation as Record<string, unknown>).warnings
+      if (Array.isArray(w)) candidates.push(...w)
+    }
+  }
+  for (const step of commit.steps || []) {
+    if (step?.name !== 'continuation_handler' || !step.result) continue
+    const w = (step.result as Record<string, unknown>).warnings
+    if (Array.isArray(w)) candidates.push(...w)
+  }
+  return candidates
+    .map(item => (typeof item === 'string' ? item.trim() : ''))
+    .filter(Boolean)
+}
+
+function captureWorldbuildingWarningsIfAny(payload: InvocationResponseDTO) {
+  const warnings = extractWorldbuildingWarnings(payload)
+  if (warnings.length) {
+    worldbuildingWarnings.value = warnings
+  }
 }
 
 function applyWorldbuildingChunk(chunk: string) {
@@ -940,6 +985,9 @@ const arrivedFields = ref<Set<string>>(new Set())
 const sseAbortController = ref<AbortController | null>(null)
 const worldbuildingRawStream = ref('')
 
+/** 后端落库时返回的降级 / 跳过提示（dimension 字段不足 20 字符或校验失败时触发） */
+const worldbuildingWarnings = ref<string[]>([])
+
 const styleConventionDisplay = computed(() => {
   if (styleText.value) return styleText.value
   return styleConventionFromBible(bibleData.value)
@@ -985,6 +1033,7 @@ function setBibleStageReviewWaiting(stage: string, waiting: boolean) {
     activeDimension.value = ''
     activeField.value = ''
     completedDimensions.value = new Set()
+    worldbuildingWarnings.value = []
   } else if (stage === 'characters') {
     generatingCharacters.value = waiting
     charactersGenerated.value = false
@@ -1002,6 +1051,7 @@ function setBibleStageHeadlessGenerating(stage: string) {
     activeDimension.value = ''
     activeField.value = ''
     completedDimensions.value = new Set()
+    worldbuildingWarnings.value = []
     phaseMessage.value = '正在生成文风公约与世界观...'
   } else if (stage === 'characters') {
     generatingCharacters.value = true
@@ -1042,6 +1092,7 @@ async function openBibleReviewPanel(stage: 'worldbuilding' | 'characters' | 'loc
     const unsub = aiInvocationStore.onSessionUpdate(sessionId, (payload) => {
       applyBibleInvocationPreview(stage, payload)
       if (payload.session?.status === 'completed' || payload.commit?.status === 'succeeded') {
+        captureWorldbuildingWarningsIfAny(payload)
         markBibleStageCommitted(stage)
         bibleInvocationUnsubs.get(sessionId)?.()
         bibleInvocationUnsubs.delete(sessionId)
@@ -1050,13 +1101,17 @@ async function openBibleReviewPanel(stage: 'worldbuilding' | 'characters' | 'loc
     bibleInvocationUnsubs.set(sessionId, unsub)
     await aiInvocationStore.open(sessionId)
     if (aiInvocationStore.session?.id === sessionId) {
-      applyBibleInvocationPreview(stage, {
+      const payload: InvocationResponseDTO = {
         session: aiInvocationStore.session,
         attempt: aiInvocationStore.attempt,
         decision: aiInvocationStore.decision,
         commit: aiInvocationStore.commit,
-        next_action: aiInvocationStore.nextAction,
-      })
+        nextAction: aiInvocationStore.nextAction,
+      }
+      applyBibleInvocationPreview(stage, payload)
+      if (payload.session?.status === 'completed' || payload.commit?.status === 'succeeded') {
+        captureWorldbuildingWarningsIfAny(payload)
+      }
     }
   } catch (e: unknown) {
     setBibleStageReviewWaiting(stage, false)
@@ -1240,8 +1295,8 @@ function updatePlotOutlineStatusFromInvocation(payload: InvocationResponseDTO) {
 async function refreshPlotOutlineFromApi(): Promise<boolean> {
   try {
     const response = await workflowApi.getPlotOutline(props.novelId)
-    if (!response.plot_outline) return false
-    const normalized = normalizeIncomingPlotOutline(response.plot_outline)
+    if (!response.plotOutline) return false
+    const normalized = normalizeIncomingPlotOutline(response.plotOutline)
     if (!normalized) return false
     plotOutline.value = normalized
     syncEditablePlotOutline(normalized)
@@ -1271,7 +1326,7 @@ function applyPlotOutlineFromResult(
 async function handlePlotOutlineInvocationUpdate(payload: InvocationResponseDTO) {
   updatePlotOutlineStatusFromInvocation(payload)
   const result = payload.commit?.result
-  if (result && applyPlotOutlineFromResult(result, payload.session?.output_bindings || [])) {
+  if (result && applyPlotOutlineFromResult(result, payload.session?.outputBindings || [])) {
     return
   }
 
@@ -1317,7 +1372,7 @@ async function openPlotOutlineReviewPanel(sessionId: string) {
         attempt: aiInvocationStore.attempt,
         decision: aiInvocationStore.decision,
         commit: aiInvocationStore.commit,
-        next_action: aiInvocationStore.nextAction,
+        nextAction: aiInvocationStore.nextAction,
       })
     }
   } catch (e: unknown) {
@@ -1394,13 +1449,13 @@ async function loadPlotOutline(opts?: { forceNew?: boolean }) {
   } catch (e: unknown) {
     try {
       const res = await workflowApi.generatePlotOutline(props.novelId)
-      plotOutline.value = normalizeIncomingPlotOutline(res.plot_outline)
+      plotOutline.value = normalizeIncomingPlotOutline(res.plotOutline)
       syncEditablePlotOutline(plotOutline.value)
-      if (res.invocation_session_id) {
-        plotOutlineSessionId.value = res.invocation_session_id
-        void openPlotOutlineReviewPanel(res.invocation_session_id)
+      if (res.invocationSessionId) {
+        plotOutlineSessionId.value = res.invocationSessionId
+        void openPlotOutlineReviewPanel(res.invocationSessionId)
       }
-      if (!res.invocation_session_id && cached?.invocationSessionId) {
+      if (!res.invocationSessionId && cached?.invocationSessionId) {
         plotOutlineSessionId.value = cached.invocationSessionId
         void openPlotOutlineReviewPanel(cached.invocationSessionId)
       }
@@ -1489,6 +1544,7 @@ function startBibleGenerationSSE() {
   worldbuildingData.value = emptyWorldbuildingShape()
   worldbuildingRawStream.value = ''
   styleText.value = ''
+  worldbuildingWarnings.value = []
 
   const ctrl = new AbortController()
   sseAbortController.value = ctrl
@@ -1772,8 +1828,8 @@ async function detectWizardProgress(): Promise<number> {
     let hasPlotOutline = false
     try {
       const response = await workflowApi.getPlotOutline(props.novelId)
-      if (response.plot_outline) {
-        const normalized = normalizeIncomingPlotOutline(response.plot_outline)
+      if (response.plotOutline) {
+        const normalized = normalizeIncomingPlotOutline(response.plotOutline)
         if (normalized) {
           plotOutline.value = normalized
           syncEditablePlotOutline(normalized)
@@ -2039,7 +2095,7 @@ async function savePlotOutlineEdits(): Promise<boolean> {
       return false
     }
     const response = await workflowApi.savePlotOutline(props.novelId, payload)
-    const saved = response.plot_outline || payload
+    const saved = response.plotOutline || payload
     plotOutline.value = saved
     syncEditablePlotOutline(saved)
     plotOutlineCommitted.value = true
@@ -2703,6 +2759,18 @@ const handleComplete = () => {
 .wizard-hint-alert {
   line-height: 1.55;
   text-align: left;
+}
+
+.wizard-warning-list {
+  margin: 0;
+  padding-left: 20px;
+  line-height: 1.7;
+  font-size: 13px;
+  color: inherit;
+}
+
+.wizard-warning-list li {
+  list-style: disc;
 }
 
 .plot-option-title {

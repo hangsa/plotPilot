@@ -466,7 +466,7 @@ async function loadSetupAnchors() {
     ])
     setupNovel.value = novelResult.status === 'fulfilled' ? novelResult.value : null
     setupBible.value = bibleResult.status === 'fulfilled' ? bibleResult.value : null
-    setupPlotOutline.value = outlineResult.status === 'fulfilled' ? outlineResult.value.plot_outline : null
+    setupPlotOutline.value = outlineResult.status === 'fulfilled' ? outlineResult.value.plotOutline : null
   } finally {
     setupAnchorsLoading.value = false
   }

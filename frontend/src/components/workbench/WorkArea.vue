@@ -1622,7 +1622,7 @@ async function openProseInvocationForChapter(
   try {
     const payload = await aiInvocationApi.create({
       operation: 'chapter.generate.prose',
-      node_key: 'chapter-prose-generation',
+      nodeKey: 'chapter-prose-generation',
       policy: featureFlags.aiInvocationDebug ? 'FULL_INTERACTIVE' : 'DIRECT',
       context: {
         novel_id: props.slug,

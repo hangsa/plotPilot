@@ -31,84 +31,84 @@ export interface InvocationPromptSnapshot {
     system?: string
     user?: string
   }
-  template_prompt?: {
+  templatePrompt?: {
     system?: string
     user?: string
   }
-  draft_prompt?: {
+  draftPrompt?: {
     system?: string
     user?: string
   }
-  node_key?: string
-  node_version_id?: string
-  asset_link_set_id?: string
-  input_binding_set_id?: string
-  output_binding_set_id?: string
-  variable_snapshot_hash?: string
-  template_hash?: string
-  composition_hash?: string
-  rendered_prompt_hash?: string
-  missing_variables?: string[]
+  nodeKey?: string
+  nodeVersionId?: string
+  assetLinkSetId?: string
+  inputBindingSetId?: string
+  outputBindingSetId?: string
+  variableSnapshotHash?: string
+  templateHash?: string
+  compositionHash?: string
+  renderedPromptHash?: string
+  missingVariables?: string[]
   diagnostics?: string[]
-  asset_version_ids?: string[]
+  assetVersionIds?: string[]
 }
 
 export interface InvocationVariablePlan {
   aliases?: Record<string, unknown>
-  resolution_items?: InvocationVariableResolutionItem[]
-  required_missing?: string[]
+  resolutionItems?: InvocationVariableResolutionItem[]
+  requiredMissing?: string[]
   diagnostics?: string[]
   lineage?: Record<string, string>
-  snapshot_hash?: string
-  snapshot_items?: InvocationVariableSnapshotItem[]
-  snapshot_groups?: InvocationVariableSnapshotGroup[]
+  snapshotHash?: string
+  snapshotItems?: InvocationVariableSnapshotItem[]
+  snapshotGroups?: InvocationVariableSnapshotGroup[]
   bindings?: InvocationVariableBinding[]
 }
 
 export interface InvocationVariableResolutionItem {
   alias?: string
-  variable_key?: string
-  display_name?: string
+  variableKey?: string
+  displayName?: string
   status?: string
-  current_value?: unknown
-  value_type?: string
-  version_number?: number
+  currentValue?: unknown
+  valueType?: string
+  versionNumber?: number
   source?: string
-  context_key?: string
+  contextKey?: string
   required?: boolean
 }
 
 export interface InvocationVariableBinding {
   alias: string
-  variable_key?: string
+  variableKey?: string
   required?: boolean
   default?: unknown
   source?: string
   enabled?: boolean
-  value_type?: string
+  valueType?: string
   scope?: string
   stage?: string
-  display_name?: string
-  target_display_name?: string
-  source_path?: string
-  projection_key?: string
-  render_mode?: string
-  preview_source?: string
+  displayName?: string
+  targetDisplayName?: string
+  sourcePath?: string
+  projectionKey?: string
+  renderMode?: string
+  previewSource?: string
 }
 
 export interface InvocationVariableSnapshotItem {
   key?: string
-  display_name?: string
+  displayName?: string
   value?: unknown
   type?: string
   scope?: string
   stage?: string
   source?: string
-  variable_key?: string
+  variableKey?: string
   required?: boolean
-  source_path?: string
-  projection_key?: string
-  render_mode?: string
+  sourcePath?: string
+  projectionKey?: string
+  renderMode?: string
 }
 
 export interface InvocationVariableSnapshotGroup {
@@ -122,20 +122,20 @@ export interface InvocationVariableSnapshotGroup {
 export interface InvocationSessionDTO {
   id: string
   operation: string
-  node_key: string
+  nodeKey: string
   policy: InvocationPolicy | string
   status: InvocationSessionStatus | string
   context?: Record<string, unknown>
   metadata?: Record<string, unknown>
   attempts?: string[]
-  prompt_snapshot?: InvocationPromptSnapshot
-  variable_plan?: InvocationVariablePlan
-  output_bindings?: InvocationVariableBinding[]
+  promptSnapshot?: InvocationPromptSnapshot
+  variablePlan?: InvocationVariablePlan
+  outputBindings?: InvocationVariableBinding[]
 }
 
 export interface InvocationAttemptDTO {
   id: string
-  session_id: string
+  sessionId: string
   status: string
   content: string
   error?: string
@@ -143,13 +143,13 @@ export interface InvocationAttemptDTO {
 
 export interface AdoptionDecisionDTO {
   id: string
-  session_id: string
-  attempt_id: string
+  sessionId: string
+  attemptId: string
   decision: string
-  accept_content: boolean
-  commit_prompt_version: boolean
-  commit_variable_outputs: boolean
-  commit_variable_bindings: boolean
+  acceptContent: boolean
+  commitPromptVersion: boolean
+  commitVariableOutputs: boolean
+  commitVariableBindings: boolean
 }
 
 export interface AdoptionCommitStepDTO {
@@ -161,8 +161,8 @@ export interface AdoptionCommitStepDTO {
 
 export interface AdoptionCommitDTO {
   id: string
-  session_id: string
-  decision_id: string
+  sessionId: string
+  decisionId: string
   status: string
   steps: AdoptionCommitStepDTO[]
   result?: Record<string, unknown>
@@ -174,12 +174,12 @@ export interface InvocationResponseDTO {
   attempt?: InvocationAttemptDTO | null
   decision?: AdoptionDecisionDTO | null
   commit?: AdoptionCommitDTO | null
-  next_action?: string
+  nextAction?: string
 }
 
 export interface InvocationCreatePayload {
   operation: string
-  node_key: string
+  nodeKey: string
   variables?: Record<string, unknown>
   context?: Record<string, unknown>
   policy?: InvocationPolicy
@@ -188,33 +188,33 @@ export interface InvocationCreatePayload {
 }
 
 export interface InvocationAcceptPayload {
-  attempt_id: string
-  accepted_by?: string
-  commit_prompt_version?: boolean
-  commit_variable_outputs?: boolean
-  commit_variable_bindings?: boolean
+  attemptId: string
+  acceptedBy?: string
+  commitPromptVersion?: boolean
+  commitVariableOutputs?: boolean
+  commitVariableBindings?: boolean
   metadata?: Record<string, unknown>
 }
 
 export interface InvocationResumePayload {
-  resumed_by?: string
+  resumedBy?: string
   config?: Record<string, unknown>
   metadata?: Record<string, unknown>
 }
 
 export interface InvocationPromptDraftPayload {
-  system_template: string
-  user_template?: string | null
+  systemTemplate: string
+  userTemplate?: string | null
 }
 
 export interface InvocationVariableUpdatePayload {
   values: Record<string, unknown>
-  updated_by?: string
+  updatedBy?: string
 }
 
 export interface InvocationPromptDraftPreviewDTO {
-  prompt_snapshot: InvocationPromptSnapshot
-  variable_plan?: InvocationVariablePlan
+  promptSnapshot: InvocationPromptSnapshot
+  variablePlan?: InvocationVariablePlan
 }
 
 export const aiInvocationApi = {
@@ -250,7 +250,7 @@ export const aiInvocationApi = {
   },
   commit(sessionId: string, decisionId: string) {
     return apiClient.post<InvocationResponseDTO>(`/ai-invocations/${sessionId}/commits`, {
-      decision_id: decisionId,
+      decisionId,
     })
   },
 }

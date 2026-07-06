@@ -38,14 +38,14 @@ const promptDraftValidationErrors = computed(() => {
 const diagnostics = computed(() => {
   const items = [
     ...promptDraftValidationErrors.value,
-    ...(store.session?.variable_plan?.diagnostics ?? []),
+    ...(store.session?.variablePlan?.diagnostics ?? []),
     ...(store.draftDiagnostics ?? []),
   ]
   return Array.from(new Set(items.filter(Boolean)))
 })
 const missingVariables = computed(() =>
-  store.promptDraftPreview?.variable_plan?.required_missing
-  ?? store.session?.variable_plan?.required_missing
+  store.promptDraftPreview?.variablePlan?.requiredMissing
+  ?? store.session?.variablePlan?.requiredMissing
   ?? [],
 )
 const missingVariableDrafts = ref<Record<string, string>>({})
@@ -58,8 +58,8 @@ const hasPrompt = computed(() => Boolean(
 ))
 const isPreCallBlocked = computed(() => store.session?.status === 'blocked' && !store.attempt?.id && !store.decision?.id)
 const isDraftEditable = computed(() => store.session?.status === 'awaiting_pre_call_review' || isPreCallBlocked.value)
-const originalSystemTemplate = computed(() => store.session?.prompt_snapshot?.template_prompt?.system ?? '')
-const originalUserTemplate = computed(() => store.session?.prompt_snapshot?.template_prompt?.user ?? '')
+const originalSystemTemplate = computed(() => store.session?.promptSnapshot?.templatePrompt?.system ?? '')
+const originalUserTemplate = computed(() => store.session?.promptSnapshot?.templatePrompt?.user ?? '')
 const systemPromptDraftChanged = computed(() => promptDraftSystem.value !== originalSystemTemplate.value)
 const userPromptDraftChanged = computed(() => promptDraftUser.value !== originalUserTemplate.value)
 const runtimePromptSystem = computed(() => (
@@ -73,7 +73,7 @@ const showLiveAttempt = computed(() => Boolean(store.attempt?.id))
 const showOutputPreview = computed(() => store.hasAttempt && !store.isGenerating && outputPreviewRows.value.length > 0)
 const showVariableCenterDebug = computed(() => featureFlags.variableCenterDebugPanels)
 const drawerTitle = computed(() => {
-  const label = store.session?.operation || store.session?.node_key || '未加载'
+  const label = store.session?.operation || store.session?.nodeKey || '未加载'
   return featureFlags.aiInvocationDebug ? `AI 调试面板：${label}` : `AI 生成审阅：${label}`
 })
 const drawerWidth = '66.666vw'
@@ -100,14 +100,14 @@ const outputRuleTips = computed(() => {
 })
 
 const outputBindings = computed<OutputBindingRow[]>(() =>
-  (store.session?.output_bindings ?? [])
+  (store.session?.outputBindings ?? [])
     .filter(item => Boolean(item.alias))
     .map(item => ({
-      targetDisplayName: item.target_display_name || '',
-      jsonPath: item.source_path || item.alias,
-      target: item.variable_key || item.alias,
+      targetDisplayName: item.targetDisplayName || '',
+      jsonPath: item.sourcePath || item.alias,
+      target: item.variableKey || item.alias,
       alias: item.alias,
-      previewSource: item.preview_source || '',
+      previewSource: item.previewSource || '',
     })),
 )
 const promptSystemHint = computed(() => {
@@ -662,7 +662,7 @@ const outputPreviewRows = computed(() =>
                   >
                     <div class="snapshot-item-head">
                       <div class="snapshot-item-title">
-                        <strong>{{ item.display_name || item.key }}</strong>
+                        <strong>{{ item.displayName || item.key }}</strong>
                         <n-text depth="3">变量名：{{ item.key }}</n-text>
                       </div>
                       <n-space :size="8">
@@ -671,18 +671,18 @@ const outputPreviewRows = computed(() =>
                       </n-space>
                     </div>
                     <n-space :size="8" wrap>
-                      <n-tag size="small" type="info">来源：{{ formatSource(item.source || item.variable_key) }}</n-tag>
+                      <n-tag size="small" type="info">来源：{{ formatSource(item.source || item.variableKey) }}</n-tag>
                       <n-tag v-if="String(item.source || '').startsWith('materialized:')" size="small" type="warning">
                         派生上下文
                       </n-tag>
-                      <n-tag v-if="item.source_path" size="small" type="default">
-                        路径：{{ item.source_path }}
+                      <n-tag v-if="item.sourcePath" size="small" type="default">
+                        路径：{{ item.sourcePath }}
                       </n-tag>
-                      <n-tag v-if="item.projection_key" size="small" type="success">
-                        投影：{{ item.projection_key }}
+                      <n-tag v-if="item.projectionKey" size="small" type="success">
+                        投影：{{ item.projectionKey }}
                       </n-tag>
-                      <n-tag v-if="item.render_mode && item.render_mode !== 'raw'" size="small" type="default">
-                        渲染：{{ item.render_mode }}
+                      <n-tag v-if="item.renderMode && item.renderMode !== 'raw'" size="small" type="default">
+                        渲染：{{ item.renderMode }}
                       </n-tag>
                     </n-space>
                     <pre class="ai-invocation-value">{{ formatValue(item.value) }}</pre>

@@ -22,10 +22,10 @@ export const PLOT_FIELD_LABELS: Record<string, string> = {
   summary: '阶段任务',
 }
 
-const PLOT_OVERVIEW_KEYS = ['main_story_overview', 'outline_main', 'main_axis', 'overview', 'story_overview', '故事主线概述', '主线概述', '故事概述']
-const PLOT_ENDING_KEYS = ['expected_ending', 'ending_expect', 'ending_expectation', 'expectedEnding', 'ending', 'finale', '预期结局', '预期结尾', '结局预期', '故事最终走向']
+const PLOT_OVERVIEW_KEYS = ['main_story_overview', 'mainStoryOverview', 'outline_main', 'main_axis', 'overview', 'story_overview', '故事主线概述', '主线概述', '故事概述']
+const PLOT_ENDING_KEYS = ['expected_ending', 'expectedEnding', 'ending_expect', 'ending_expectation', 'ending', 'finale', '预期结局', '预期结尾', '结局预期', '故事最终走向']
 const PLOT_CONFLICT_KEYS = ['core_conflict', 'coreConflict', 'conflict', 'main_conflict', '核心冲突', '核心矛盾', '核心对抗']
-const PLOT_STAGE_KEYS = ['stage_plan', 'stages', '阶段规划']
+const PLOT_STAGE_KEYS = ['stage_plan', 'stagePlan', 'stages', '阶段规划']
 
 const LEGACY_STAGE_KEY_ALIASES = [
   ['stage_opening_1_15', 'stage_opening', 'opening'],
@@ -134,13 +134,14 @@ function normalizeStagePlanRanges(
 ): PlotOutlineDTO['stage_plan'] {
   const ranges = buildStageChapterRanges(totalChapters)
   return stagePlan.map((stage, index) => {
+    const stageRecord = stage as unknown as Record<string, unknown>
     const meta = STAGE_PHASE_META[index]
     const fallback = ranges[index] || {
       chapter_start: index + 1,
       chapter_end: Math.max(index + 1, Math.floor(Number(totalChapters) || 100)),
     }
-    const rawStart = coerceChapterNumber(stage.chapter_start)
-    const rawEnd = coerceChapterNumber(stage.chapter_end)
+    const rawStart = coerceChapterNumber(stageRecord.chapter_start as number) ?? coerceChapterNumber(stageRecord.chapterStart as number)
+    const rawEnd = coerceChapterNumber(stageRecord.chapter_end as number) ?? coerceChapterNumber(stageRecord.chapterEnd as number)
     const keepManualRange = rawStart !== undefined && rawEnd !== undefined && rawStart <= rawEnd
     const next = {
       ...stage,
@@ -153,7 +154,10 @@ function normalizeStagePlanRanges(
     return {
       ...next,
       ...(sourcePhase && meta && sourcePhase !== meta.phase ? { source_phase: stage.phase || stage.label } : {}),
-      range_percent: buildStageRangePercentLabel(next, Math.max(totalChapters, next.chapter_end || 0)) || stage.range_percent,
+      range_percent: buildStageRangePercentLabel(next, Math.max(totalChapters, next.chapter_end || 0))
+        || (stageRecord.range_percent as string)
+        || (stageRecord.rangePercent as string)
+        || '',
     }
   })
 }
@@ -180,19 +184,27 @@ export function parsePlotLabeledSections(text: string): Record<string, string> {
 
 export function clonePlotOutline(outline: PlotOutlineDTO | null | undefined, totalChapters = 100): PlotOutlineDTO {
   if (!outline) return createEmptyPlotOutline()
+  const record = outline as unknown as Record<string, unknown>
   return {
     ...outline,
-    main_story_overview: outline.main_story_overview || '',
-    core_conflict: outline.core_conflict || '',
-    expected_ending: outline.expected_ending || '',
-    stage_plan: normalizeStagePlanRanges((outline.stage_plan || []).map(stage => ({
-      ...stage,
-      ...parsePlotLabeledSections(stage.summary || ''),
-      label: stage.label || '',
-      range_percent: stage.range_percent || '',
-      summary: parsePlotLabeledSections(stage.summary || '').summary || stage.summary || '',
-      key_goals: Array.isArray(stage.key_goals) ? [...stage.key_goals] : [],
-    })), totalChapters),
+    main_story_overview: (record.main_story_overview as string) || (record.mainStoryOverview as string) || '',
+    core_conflict: (record.core_conflict as string) || (record.coreConflict as string) || '',
+    expected_ending: (record.expected_ending as string) || (record.expectedEnding as string) || '',
+    stage_plan: normalizeStagePlanRanges(((record.stage_plan as PlotOutlineDTO['stage_plan']) || (record.stagePlan as PlotOutlineDTO['stage_plan']) || []).map(stage => {
+      const stageRecord = stage as unknown as Record<string, unknown>
+      return {
+        ...stage,
+        ...parsePlotLabeledSections(stage.summary || ''),
+        label: stage.label || '',
+        range_percent: (stageRecord.range_percent as string) || (stageRecord.rangePercent as string) || '',
+        summary: parsePlotLabeledSections(stage.summary || '').summary || stage.summary || '',
+        key_goals: Array.isArray(stage.key_goals)
+          ? [...stage.key_goals]
+          : Array.isArray(stageRecord.keyGoals as string[])
+            ? [...(stageRecord.keyGoals as string[])]
+            : [],
+      }
+    }), totalChapters),
   }
 }
 
@@ -276,14 +288,16 @@ export function validateEditablePlotOutline(outline: PlotOutlineDTO): string {
     !PLOT_OUTLINE_META_KEYS.has(key) && String(value ?? '').trim().length > 0,
   )
   if (!hasTopContent) return '请至少保留一项总纲内容'
-  if (!outline.stage_plan.length) return '请保留并填写阶段规划'
-  const invalidStageRange = outline.stage_plan.find((stage) => {
-    const start = stage.chapter_start
-    const end = stage.chapter_end
+  const stagePlan = (topRecord.stage_plan as PlotOutlineDTO['stage_plan']) || (topRecord.stagePlan as PlotOutlineDTO['stage_plan']) || []
+  if (!stagePlan.length) return '请保留并填写阶段规划'
+  const invalidStageRange = stagePlan.find((stage) => {
+    const stageRecord = stage as unknown as Record<string, unknown>
+    const start = stage.chapter_start ?? stageRecord.chapterStart
+    const end = stage.chapter_end ?? stageRecord.chapterEnd
     return typeof start !== 'number' || typeof end !== 'number' || start < 1 || end < 1 || start > end
   })
   if (invalidStageRange) return `请检查${invalidStageRange.label || '阶段'}的起止章节`
-  const emptyStage = outline.stage_plan.find(stage => stageContentFieldKeys(stage).every(key => !plotFieldText(stage, key).trim()))
+  const emptyStage = stagePlan.find(stage => stageContentFieldKeys(stage).every(key => !plotFieldText(stage, key).trim()))
   if (emptyStage) return `请填写${emptyStage.label || '阶段'}的规划内容`
   return ''
 }
@@ -354,10 +368,10 @@ export function normalizePlotOutlineFromBindings(
   const { byVariableKey } = extractBoundOutputMaps(source, bindings)
   const direct = byVariableKey['plot.outline']
   if (direct && typeof direct === 'object') return normalizePlotOutlineShape(direct, totalChapters)
-  const stagePlan = byVariableKey['plot.stage_plan']
-  const overview = byVariableKey['plot.main_story_overview']
-  const ending = byVariableKey['plot.expected_ending']
-  const conflict = byVariableKey['plot.core_conflict']
+  const stagePlan = byVariableKey['plot.stagePlan']
+  const overview = byVariableKey['plot.mainStoryOverview']
+  const ending = byVariableKey['plot.expectedEnding']
+  const conflict = byVariableKey['plot.coreConflict']
   if (!stagePlan && !overview && !ending && !conflict) return null
   return normalizePlotOutlineShape({
     main_story_overview: overview,
@@ -372,7 +386,7 @@ export function extractPlotOutlineFromResult(
   outputBindings: InvocationVariableBinding[] = [],
   totalChapters = 100,
 ): PlotOutlineDTO | null {
-  const direct = result.plot_outline
+  const direct = result.plotOutline
   if (direct && typeof direct === 'object') return normalizePlotOutlineShape(direct, totalChapters)
   if (outputBindings.length) {
     const boundDirect = normalizePlotOutlineFromBindings(result, outputBindings, totalChapters)
@@ -381,7 +395,7 @@ export function extractPlotOutlineFromResult(
   const continuation = result.continuation
   if (continuation && typeof continuation === 'object') {
     const continuationRecord = continuation as Record<string, unknown>
-    const fromContinuation = continuationRecord.plot_outline
+    const fromContinuation = continuationRecord.plotOutline
     if (fromContinuation && typeof fromContinuation === 'object') return normalizePlotOutlineShape(fromContinuation, totalChapters)
     if (outputBindings.length) {
       const boundContinuation = normalizePlotOutlineFromBindings(continuationRecord, outputBindings, totalChapters)
@@ -390,7 +404,7 @@ export function extractPlotOutlineFromResult(
     const normalizedContinuation = normalizePlotOutlineShape(continuationRecord, totalChapters)
     if (normalizedContinuation?.main_story_overview && normalizedContinuation.stage_plan?.length) return normalizedContinuation
   }
-  const acceptedContent = result.accepted_content
+  const acceptedContent = result.acceptedContent
   if (typeof acceptedContent === 'string' && acceptedContent.trim()) {
     const parsedRecord = parseJsonLikeRecord(acceptedContent)
     if (parsedRecord) {

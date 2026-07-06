@@ -124,9 +124,9 @@ export interface PlotOutlineDTO {
 }
 
 export interface GeneratePlotOutlineResponse {
-  plot_outline: PlotOutlineDTO | null
-  invocation_session_id?: string
-  invocation_next_action?: string
+  plotOutline: PlotOutlineDTO | null
+  invocationSessionId?: string
+  invocationNextAction?: string
 }
 
 export type MainPlotOptionsStreamEvent =

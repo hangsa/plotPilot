@@ -134,9 +134,9 @@ export function pickExactOrDottedChildren(source: unknown, key: string): unknown
 
 export function resolveBoundOutputValue(
   source: unknown,
-  binding: Pick<InvocationVariableBinding, 'source_path' | 'alias' | 'variable_key'>,
+  binding: Pick<InvocationVariableBinding, 'sourcePath' | 'alias' | 'variableKey'>,
 ): unknown {
-  const candidates = [binding.source_path, binding.alias, binding.variable_key]
+  const candidates = [binding.sourcePath, binding.alias, binding.variableKey]
   for (const candidate of candidates) {
     const normalized = String(candidate || '').trim()
     if (!normalized) continue
@@ -158,7 +158,7 @@ export function extractBoundOutputMaps(
     const value = resolveBoundOutputValue(source, binding)
     if (value === undefined) continue
     if (binding.alias) byAlias[binding.alias] = value
-    if (binding.variable_key) byVariableKey[binding.variable_key] = value
+    if (binding.variableKey) byVariableKey[binding.variableKey] = value
   }
   return { byAlias, byVariableKey }
 }

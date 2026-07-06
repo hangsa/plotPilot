@@ -62,43 +62,43 @@ export const useAIInvocationStore = defineStore('aiInvocation', () => {
   const liveAttemptDisplay = computed(() => liveAttemptContent.value || attempt.value?.content || '')
   const title = computed(() => {
     if (!session.value) return 'AI 生成审阅'
-    return `${session.value.operation} / ${session.value.node_key}`
+    return `${session.value.operation} / ${session.value.nodeKey}`
   })
   const draftSystemTemplate = computed(
-    () => session.value?.prompt_snapshot?.template_prompt?.system || '',
+    () => session.value?.promptSnapshot?.templatePrompt?.system || '',
   )
   const draftSystemEdited = computed(
     () => promptDraftSystem.value || promptDraftSavedSystem.value || draftSystemTemplate.value,
   )
   const draftUserTemplate = computed(
-    () => session.value?.prompt_snapshot?.template_prompt?.user || '',
+    () => session.value?.promptSnapshot?.templatePrompt?.user || '',
   )
   const draftUserEdited = computed(
     () => promptDraftUser.value || promptDraftSavedUser.value || draftUserTemplate.value,
   )
   const draftRuntimeSystem = computed(
-    () => promptDraftPreview.value?.prompt_snapshot?.prompt?.system
-      || session.value?.prompt_snapshot?.prompt?.system
+    () => promptDraftPreview.value?.promptSnapshot?.prompt?.system
+      || session.value?.promptSnapshot?.prompt?.system
       || '',
   )
   const draftRuntimeUser = computed(
-    () => promptDraftPreview.value?.prompt_snapshot?.prompt?.user
-      || session.value?.prompt_snapshot?.prompt?.user
+    () => promptDraftPreview.value?.promptSnapshot?.prompt?.user
+      || session.value?.promptSnapshot?.prompt?.user
       || '',
   )
   const draftDiagnostics = computed(
-    () => promptDraftPreview.value?.prompt_snapshot?.diagnostics
-      || session.value?.prompt_snapshot?.diagnostics
+    () => promptDraftPreview.value?.promptSnapshot?.diagnostics
+      || session.value?.promptSnapshot?.diagnostics
       || [],
   )
   const draftMissingVariables = computed(
-    () => promptDraftPreview.value?.prompt_snapshot?.missing_variables
-      || session.value?.prompt_snapshot?.missing_variables
+    () => promptDraftPreview.value?.promptSnapshot?.missingVariables
+      || session.value?.promptSnapshot?.missingVariables
       || [],
   )
   const variableSnapshotGroups = computed(() => {
-    const plan = promptDraftPreview.value?.variable_plan || session.value?.variable_plan
-    return plan?.snapshot_groups ?? []
+    const plan = promptDraftPreview.value?.variablePlan || session.value?.variablePlan
+    return plan?.snapshotGroups ?? []
   })
   const debugPanelEnabled = computed(() => featureFlags.aiInvocationDebug)
 
@@ -120,9 +120,9 @@ export const useAIInvocationStore = defineStore('aiInvocation', () => {
   }
 
   function shouldCommitPromptVersion(): boolean {
-    const snapshot = session.value?.prompt_snapshot
-    const draft = snapshot?.draft_prompt
-    const template = snapshot?.template_prompt
+    const snapshot = session.value?.promptSnapshot
+    const draft = snapshot?.draftPrompt
+    const template = snapshot?.templatePrompt
     if (!draft) return false
     if (!template) return true
     return draft.system !== template.system || draft.user !== template.user
@@ -137,12 +137,12 @@ export const useAIInvocationStore = defineStore('aiInvocation', () => {
     attempt.value = payload.attempt ?? (sameSession ? attempt.value ?? null : null)
     decision.value = payload.decision ?? (sameSession ? decision.value ?? null : null)
     commit.value = payload.commit ?? (sameSession ? commit.value ?? null : null)
-    nextAction.value = payload.next_action ?? ''
-    promptDraftSavedSystem.value = payload.session?.prompt_snapshot?.draft_prompt?.system
-      ?? payload.session?.prompt_snapshot?.template_prompt?.system
+    nextAction.value = payload.nextAction ?? ''
+    promptDraftSavedSystem.value = payload.session?.promptSnapshot?.draftPrompt?.system
+      ?? payload.session?.promptSnapshot?.templatePrompt?.system
       ?? ''
-    promptDraftSavedUser.value = payload.session?.prompt_snapshot?.draft_prompt?.user
-      ?? payload.session?.prompt_snapshot?.template_prompt?.user
+    promptDraftSavedUser.value = payload.session?.promptSnapshot?.draftPrompt?.user
+      ?? payload.session?.promptSnapshot?.templatePrompt?.user
       ?? ''
     promptDraftSystem.value = promptDraftSavedSystem.value
     promptDraftUser.value = promptDraftSavedUser.value
@@ -222,11 +222,11 @@ export const useAIInvocationStore = defineStore('aiInvocation', () => {
     stopGenerationPolling()
     try {
       const payload = await aiInvocationApi.get(sessionId)
-      promptDraftSavedSystem.value = payload.session?.prompt_snapshot?.draft_prompt?.system
-        ?? payload.session?.prompt_snapshot?.template_prompt?.system
+      promptDraftSavedSystem.value = payload.session?.promptSnapshot?.draftPrompt?.system
+        ?? payload.session?.promptSnapshot?.templatePrompt?.system
         ?? ''
-      promptDraftSavedUser.value = payload.session?.prompt_snapshot?.draft_prompt?.user
-        ?? payload.session?.prompt_snapshot?.template_prompt?.user
+      promptDraftSavedUser.value = payload.session?.promptSnapshot?.draftPrompt?.user
+        ?? payload.session?.promptSnapshot?.templatePrompt?.user
         ?? ''
       promptDraftSystem.value = promptDraftSavedSystem.value
       promptDraftUser.value = promptDraftSavedUser.value
@@ -245,9 +245,9 @@ export const useAIInvocationStore = defineStore('aiInvocation', () => {
     error.value = ''
     try {
       const payload = await aiInvocationApi.accept(session.value.id, {
-        attempt_id: attempt.value.id,
-        accepted_by: 'user',
-        commit_prompt_version: shouldCommitPromptVersion(),
+        attemptId: attempt.value.id,
+        acceptedBy: 'user',
+        commitPromptVersion: shouldCommitPromptVersion(),
       })
       applyResponse(payload)
     } catch (err) {
@@ -264,8 +264,8 @@ export const useAIInvocationStore = defineStore('aiInvocation', () => {
     error.value = ''
     try {
       const payload = await aiInvocationApi.reject(session.value.id, {
-        attempt_id: attempt.value.id,
-        accepted_by: 'user',
+        attemptId: attempt.value.id,
+        acceptedBy: 'user',
       })
       applyResponse(payload)
     } catch (err) {
@@ -282,7 +282,7 @@ export const useAIInvocationStore = defineStore('aiInvocation', () => {
     error.value = ''
     try {
       const payload = await aiInvocationApi.retry(session.value.id, {
-        resumed_by: 'user',
+        resumedBy: 'user',
       })
       applyResponse(payload)
       decision.value = null
@@ -305,7 +305,7 @@ export const useAIInvocationStore = defineStore('aiInvocation', () => {
     error.value = ''
     try {
       const payload = await aiInvocationApi.resume(session.value.id, {
-        resumed_by: 'user',
+        resumedBy: 'user',
       })
       applyResponse(payload)
       if (shouldKeepPanelVisible()) {
@@ -325,8 +325,8 @@ export const useAIInvocationStore = defineStore('aiInvocation', () => {
     promptDraftLoading.value = true
     try {
       const payload = await aiInvocationApi.previewPromptDraft(session.value.id, {
-        system_template: systemTemplate,
-        user_template: userTemplate,
+        systemTemplate,
+        userTemplate,
       })
       promptDraftPreview.value = payload
     } finally {
@@ -339,8 +339,8 @@ export const useAIInvocationStore = defineStore('aiInvocation', () => {
     promptDraftLoading.value = true
     try {
       const payload = await aiInvocationApi.savePromptDraft(session.value.id, {
-        system_template: systemTemplate,
-        user_template: userTemplate,
+        systemTemplate,
+        userTemplate,
       })
       promptDraftSavedSystem.value = systemTemplate
       promptDraftSavedUser.value = userTemplate ?? ''
@@ -358,7 +358,7 @@ export const useAIInvocationStore = defineStore('aiInvocation', () => {
     try {
       const payload = await aiInvocationApi.updateVariables(session.value.id, {
         values,
-        updated_by: 'user',
+        updatedBy: 'user',
       })
       applyResponse(payload)
     } catch (err) {
