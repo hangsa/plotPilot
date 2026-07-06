@@ -10,7 +10,11 @@ from application.ai_invocation.output_binding_resolution import (
     load_session_output_bindings,
 )
 from application.world.dtos.bible_dto import CharacterDTO, LocationDTO, StyleNoteDTO
-from application.world.worldbuilding_schema import validate_complete_dimension_fields
+from application.world.worldbuilding_schema import (
+    canonicalize_dimension_fields,
+    schema_field_keys,
+    validate_complete_dimension_fields,
+)
 
 
 WORLDBUILDING_DIMENSION_KEYS = ("core_rules", "geography", "society", "culture", "daily_life")
@@ -59,9 +63,18 @@ def _as_str(value: Any, default: str = "") -> str:
 
 
 def _coerce_worldbuilding_dimension(dim_key: str, value: Any) -> dict[str, Any]:
+    """校验 → 降级保留。
+
+    严格校验 (每个 schema 字段 min_length=20 且必填) 失败时,降级为只保留
+    schema 字段中的非空字符串值,避免 LLM 输出异常导致整个维度在 db 中凭空
+    消失。完全空(没有任何非空字段)时返回 ``{}``,调用方据此跳过该维度。
+    """
     value = _parse_jsonish_value(value)
     if isinstance(value, Mapping):
-        return validate_complete_dimension_fields(dim_key, value)
+        validated = validate_complete_dimension_fields(dim_key, value)
+        if validated:
+            return validated
+        return canonicalize_dimension_fields(dim_key, value)
     return {}
 
 
@@ -148,14 +161,31 @@ def bible_worldbuilding_handler(context: ContinuationContext) -> Mapping[str, An
             for dim_key in WORLDBUILDING_DIMENSION_KEYS
             if by_variable_key.get(f"worldbuilding.{dim_key}", data.get(dim_key)) is not None
         }
-    normalized = {
-        dim_key: coerced
-        for dim_key, block in worldbuilding.items()
-        if dim_key in WORLDBUILDING_DIMENSION_KEYS
-        for coerced in [_coerce_worldbuilding_dimension(dim_key, block)]
-        if coerced
-    }
+    normalized: dict[str, Any] = {}
+    warnings: list[str] = []
+    for dim_key in WORLDBUILDING_DIMENSION_KEYS:
+        block = worldbuilding.get(dim_key)
+        if not isinstance(block, Mapping):
+            warnings.append(f"{dim_key}: 输出缺失,跳过写入")
+            continue
+        coerced = _coerce_worldbuilding_dimension(dim_key, block)
+        schema_fields = schema_field_keys(dim_key)
+        if not coerced:
+            warnings.append(
+                f"{dim_key}: 字段全部为空或不足 20 字符,跳过写入"
+            )
+            continue
+        normalized[dim_key] = coerced
+        degraded = len(coerced) < len(schema_fields) or any(
+            len(v) < 20 for v in coerced.values()
+        )
+        if degraded:
+            warnings.append(
+                f"{dim_key}: 校验未通过,降级保留 {len(coerced)}/{len(schema_fields)} 字段"
+            )
     result: dict[str, Any] = {"novel_id": novel_id}
+    if warnings:
+        result["warnings"] = warnings
     if style:
         result["style"] = style
     if normalized:

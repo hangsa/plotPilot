@@ -45,3 +45,11 @@
     }
   }
 }
+
+【输出前自检 — 必须满足才能落库】
+- 顶层必须含 style 字段（80-160 字）和 worldbuilding 对象（不能并列在 style 同级）
+- worldbuilding 必须包含全部 5 个维度对象：core_rules、geography、society、culture、daily_life；缺一个都会被丢弃
+- 每个维度的所有子字段（core_rules 3 个、geography 4 个、society 3 个、culture 3 个、daily_life 3 个，共 16 个）必须为非空字符串，长度 ≥ 60 字
+- 字符串内部禁止使用未转义的英文双引号 `"`；如需引用方言/俚语，请用中文「」或『』或反斜杠转义
+- JSON 必须以 `}` 完整闭合；若 token 预算吃紧，优先把 16 个字段全部写满（即使每条短到 60 字），也不要中途截断或省略字段
+- 不要在 value 字段内嵌套 JSON 对象或数组，所有内容必须是一段连续中文文本

@@ -40,7 +40,7 @@ SENSITIVE_FIELD_MARKERS = (
 DEFAULT_PREVIEW_CHARS = 320
 
 
-@dataclass(slots=True)
+@dataclass
 class TraceContext:
     """一次 AI 调用链路的上下文。"""
 

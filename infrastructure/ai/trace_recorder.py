@@ -20,7 +20,7 @@ def _utc_now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="milliseconds")
 
 
-@dataclass(slots=True)
+@dataclass
 class AiTraceSpan:
     trace_id: str
     span_id: str
