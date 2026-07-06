@@ -1,9 +1,9 @@
 import { apiClient } from './config'
 
 export interface CoreRules {
-  power_system: string
-  physics_rules: string
-  magic_tech: string
+  powerSystem: string
+  physicsRules: string
+  magicTech: string
 }
 
 export interface Geography {
@@ -16,7 +16,7 @@ export interface Geography {
 export interface Society {
   politics: string
   economy: string
-  class_system: string
+  classSystem: string
 }
 
 export interface Culture {
@@ -26,23 +26,23 @@ export interface Culture {
 }
 
 export interface DailyLife {
-  food_clothing: string
-  language_slang: string
+  foodClothing: string
+  languageSlang: string
   entertainment: string
 }
 
 export interface Worldbuilding {
   id: string
-  novel_id: string
-  schema_version?: number
+  novelId: string
+  schemaVersion?: number
   dimensions?: Record<string, Record<string, string>>
-  core_rules: CoreRules
+  coreRules: CoreRules
   geography: Geography
   society: Society
   culture: Culture
-  daily_life: DailyLife
-  created_at: string
-  updated_at: string
+  dailyLife: DailyLife
+  createdAt: string
+  updatedAt: string
 }
 
 export const worldbuildingApi = {

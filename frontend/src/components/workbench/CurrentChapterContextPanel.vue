@@ -57,17 +57,17 @@
           <span class="pp-jump" style="margin-left:0;font-size:12px" @click="$emit('jump-tab', 'worldbuilding')">去填写 →</span>
         </div>
         <div v-else-if="hasWorldRules" class="pp-section-body">
-          <div v-if="worldRules.power_system" class="pp-kv">
+          <div v-if="worldRules.powerSystem" class="pp-kv">
             <span class="pp-kv-key">力量体系</span>
-            <span class="pp-kv-val">{{ worldRules.power_system }}</span>
+            <span class="pp-kv-val">{{ worldRules.powerSystem }}</span>
           </div>
-          <div v-if="worldRules.physics_rules" class="pp-kv">
+          <div v-if="worldRules.physicsRules" class="pp-kv">
             <span class="pp-kv-key">物理规律</span>
-            <span class="pp-kv-val">{{ worldRules.physics_rules }}</span>
+            <span class="pp-kv-val">{{ worldRules.physicsRules }}</span>
           </div>
-          <div v-if="worldRules.magic_tech" class="pp-kv">
+          <div v-if="worldRules.magicTech" class="pp-kv">
             <span class="pp-kv-key">魔法/科技</span>
-            <span class="pp-kv-val">{{ worldRules.magic_tech }}</span>
+            <span class="pp-kv-val">{{ worldRules.magicTech }}</span>
           </div>
         </div>
       </div>
@@ -251,9 +251,9 @@ const wordCountPct = computed(() => {
 
 // ── world ───────────────────────────────────────────────────────
 const loadingWorld = ref(false)
-const worldRules = ref({ power_system: '', physics_rules: '', magic_tech: '' })
+const worldRules = ref({ powerSystem: '', physicsRules: '', magicTech: '' })
 const hasWorldRules = computed(() =>
-  !!(worldRules.value.power_system || worldRules.value.physics_rules || worldRules.value.magic_tech)
+  !!(worldRules.value.powerSystem || worldRules.value.physicsRules || worldRules.value.magicTech)
 )
 let worldFetchSeq = 0
 
@@ -261,7 +261,7 @@ async function fetchWorld() {
   const slug = props.slug
   const seq = ++worldFetchSeq
   if (!slug) {
-    worldRules.value = { power_system: '', physics_rules: '', magic_tech: '' }
+    worldRules.value = { powerSystem: '', physicsRules: '', magicTech: '' }
     loadingWorld.value = false
     return
   }
@@ -269,11 +269,11 @@ async function fetchWorld() {
   try {
     const wb = await worldbuildingApi.getWorldbuilding(slug)
     if (seq !== worldFetchSeq || props.slug !== slug) return
-    const cr = wb?.core_rules
+    const cr = wb?.coreRules
     worldRules.value = {
-      power_system: cr?.power_system ?? '',
-      physics_rules: cr?.physics_rules ?? '',
-      magic_tech: cr?.magic_tech ?? '',
+      powerSystem: cr?.powerSystem ?? '',
+      physicsRules: cr?.physicsRules ?? '',
+      magicTech: cr?.magicTech ?? '',
     }
   } catch {
     /* silent */

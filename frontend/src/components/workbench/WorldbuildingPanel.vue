@@ -71,27 +71,27 @@
                     <span class="wb-section-title">核心法则与底层逻辑</span>
                     <span class="wb-section-desc">力量体系、物理规律、魔法/科技机制</span>
                   </div>
-                  <span class="pp-chip" :class="sectionChipClass('core_rules')" style="margin-left:auto;font-size:10px">
-                    {{ sectionChipLabel('core_rules') }}
+                  <span class="pp-chip" :class="sectionChipClass('coreRules')" style="margin-left:auto;font-size:10px">
+                    {{ sectionChipLabel('coreRules') }}
                   </span>
                 </div>
               </template>
               <div class="wb-fields">
                 <div class="wb-field">
                   <label class="wb-label">力量体系/科技树</label>
-                  <n-input v-model:value="formData.core_rules.power_system" type="textarea"
+                  <n-input v-model:value="formData.coreRules.powerSystem" type="textarea"
                     placeholder="魔法的来源？需要付出什么代价？科技水平发展到哪一步？"
                     :autosize="{ minRows: 2, maxRows: 7 }" />
                 </div>
                 <div class="wb-field">
                   <label class="wb-label">物理规律</label>
-                  <n-input v-model:value="formData.core_rules.physics_rules" type="textarea"
+                  <n-input v-model:value="formData.coreRules.physicsRules" type="textarea"
                     placeholder="重力、时间流逝、日夜交替是否与现实不同？"
                     :autosize="{ minRows: 2, maxRows: 5 }" />
                 </div>
                 <div class="wb-field">
                   <label class="wb-label">魔法/科技机制</label>
-                  <n-input v-model:value="formData.core_rules.magic_tech" type="textarea"
+                  <n-input v-model:value="formData.coreRules.magicTech" type="textarea"
                     placeholder="详细的运作机制和限制"
                     :autosize="{ minRows: 2, maxRows: 5 }" />
                 </div>
@@ -173,7 +173,7 @@
                 </div>
                 <div class="wb-field">
                   <label class="wb-label">阶级系统</label>
-                  <n-input v-model:value="formData.society.class_system" type="textarea"
+                  <n-input v-model:value="formData.society.classSystem" type="textarea"
                     placeholder="社会分层、阶层流动性、底层困境"
                     :autosize="{ minRows: 2, maxRows: 5 }" />
                 </div>
@@ -229,27 +229,27 @@
                     <span class="wb-section-title">沉浸感细节</span>
                     <span class="wb-section-desc">衣食住行、俚语、娱乐 — 直接注入 AI</span>
                   </div>
-                  <span class="pp-chip" :class="sectionChipClass('daily_life')" style="margin-left:auto;font-size:10px">
-                    {{ sectionChipLabel('daily_life') }}
+                  <span class="pp-chip" :class="sectionChipClass('dailyLife')" style="margin-left:auto;font-size:10px">
+                    {{ sectionChipLabel('dailyLife') }}
                   </span>
                 </div>
               </template>
               <div class="wb-fields">
                 <div class="wb-field">
                   <label class="wb-label">衣食住行</label>
-                  <n-input v-model:value="formData.daily_life.food_clothing" type="textarea"
+                  <n-input v-model:value="formData.dailyLife.foodClothing" type="textarea"
                     placeholder="平时吃什么？穿什么？住哪里？用什么交通工具？"
                     :autosize="{ minRows: 2, maxRows: 5 }" />
                 </div>
                 <div class="wb-field">
                   <label class="wb-label">俚语与口音</label>
-                  <n-input v-model:value="formData.daily_life.language_slang" type="textarea"
+                  <n-input v-model:value="formData.dailyLife.languageSlang" type="textarea"
                     placeholder="特有的词汇、黑话、方言"
                     :autosize="{ minRows: 2, maxRows: 5 }" />
                 </div>
                 <div class="wb-field">
                   <label class="wb-label">娱乐方式</label>
-                  <n-input v-model:value="formData.daily_life.entertainment" type="textarea"
+                  <n-input v-model:value="formData.dailyLife.entertainment" type="textarea"
                     placeholder="闲暇时怎么打发时间？"
                     :autosize="{ minRows: 2, maxRows: 5 }" />
                 </div>
@@ -310,11 +310,11 @@ const isDirty = ref(false)
 const lastSavedAt = ref('')
 
 const formData = ref({
-  core_rules:  { power_system: '', physics_rules: '', magic_tech: '' },
+  coreRules:  { powerSystem: '', physicsRules: '', magicTech: '' },
   geography:   { terrain: '', climate: '', resources: '', ecology: '' },
-  society:     { politics: '', economy: '', class_system: '' },
+  society:     { politics: '', economy: '', classSystem: '' },
   culture:     { history: '', religion: '', taboos: '' },
-  daily_life:  { food_clothing: '', language_slang: '', entertainment: '' },
+  dailyLife:   { foodClothing: '', languageSlang: '', entertainment: '' },
 })
 
 // ── Controlled collapse ──────────────────────────────────────────
@@ -327,7 +327,7 @@ function toggleAll() {
 }
 
 // ── Section status ───────────────────────────────────────────────
-type SectionKey = 'core_rules' | 'geography' | 'society' | 'culture' | 'daily_life'
+type SectionKey = 'coreRules' | 'geography' | 'society' | 'culture' | 'dailyLife'
 
 function sectionValues(key: SectionKey): string[] {
   return Object.values(formData.value[key] as Record<string, string>)
@@ -358,7 +358,7 @@ function sectionChipLabel(key: SectionKey): string {
 }
 
 const filledDimensions = computed<number>(() => {
-  const keys: SectionKey[] = ['core_rules', 'geography', 'society', 'culture', 'daily_life']
+  const keys: SectionKey[] = ['coreRules', 'geography', 'society', 'culture', 'dailyLife']
   return keys.filter(k => sectionFilledCount(k) > 0).length
 })
 
@@ -389,17 +389,17 @@ const loadWorldbuilding = async () => {
   isDirty.value = false
   try {
     const data = await worldbuildingApi.getWorldbuilding(props.slug)
-    const isEmpty = !data.core_rules?.power_system && !data.geography?.terrain &&
-                    !data.society?.politics && !data.culture?.history && !data.daily_life?.food_clothing
+    const isEmpty = !data.coreRules?.powerSystem && !data.geography?.terrain &&
+                    !data.society?.politics && !data.culture?.history && !data.dailyLife?.foodClothing
     if (isEmpty) {
       message.warning('世界观尚未创建，首次保存时将自动创建')
     } else {
       formData.value = {
-        core_rules:  data.core_rules  || formData.value.core_rules,
+        coreRules:  data.coreRules  || formData.value.coreRules,
         geography:   data.geography   || formData.value.geography,
         society:     data.society     || formData.value.society,
         culture:     data.culture     || formData.value.culture,
-        daily_life:  data.daily_life  || formData.value.daily_life,
+        dailyLife:   data.dailyLife   || formData.value.dailyLife,
       }
     }
   } catch (error: unknown) {
