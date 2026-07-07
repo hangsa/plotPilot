@@ -25,10 +25,11 @@ class TestGuardHit:
         assert hit.matched_text is None
 
     def test_is_frozen_rejects_mutation(self):
+        from dataclasses import FrozenInstanceError
         hit = GuardHit(
             rule_id="x", sflog_id="y", severity=Severity.HARD, message="m",
         )
-        with pytest.raises((AttributeError, Exception)):
+        with pytest.raises(FrozenInstanceError):
             hit.message = "new"  # type: ignore[misc]
 
 
@@ -51,6 +52,8 @@ class TestGuardReport:
         )
         assert report.passed is False
         assert len(report.hits) == 1
+        assert len(report.hard_hits()) == 1
+        assert report.hard_hits()[0] == hit
 
     def test_forced_pass_at_attempt_3(self):
         hit = GuardHit(
