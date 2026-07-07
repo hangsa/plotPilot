@@ -213,6 +213,7 @@ def evaluate(
     final_hits: List[GuardHit] = []
     current_records = sflog_records
     hard_before: List[GuardHit] = []
+    chapter_number = bible_snapshot.chapter_id   # §8 trap: this is the NUMBER, not DB rowid
 
     # ── Attempts 1, 2: SF_LOG-mode ───────────────────────────────
     for attempt in (1, 2):
@@ -221,7 +222,7 @@ def evaluate(
         hard = [h for h in hits if h.severity is Severity.HARD]
 
         if not hard:
-            self._log(novel_id=novel_id, chapter_id=chapter_id, chapter_number=bible_snapshot.chapter_id,
+            self._log(novel_id=novel_id, chapter_id=chapter_id, chapter_number=chapter_number,
                       action="passed", mode="sflog", attempt=attempt,
                       hard_before=len(hard_before), hard_after=0)
             return GuardReport(passed=True, forced_pass=False, attempt=attempt, hits=hits), None
@@ -229,12 +230,12 @@ def evaluate(
         if attempt < 2:
             rewritten = self.sflog_invoker(current_records, hard, attempt)
             if rewritten is not None:
-                self._log(novel_id=novel_id, chapter_id=chapter_id, chapter_number=bible_snapshot.chapter_id,
+                self._log(novel_id=novel_id, chapter_id=chapter_id, chapter_number=chapter_number,
                           action="rewritten_sflog", mode="sflog", attempt=attempt,
                           hard_before=len(hard_before), hard_after=len(hard))
                 current_records = rewritten.records
             else:
-                self._log(novel_id=novel_id, chapter_id=chapter_id, chapter_number=bible_snapshot.chapter_id,
+                self._log(novel_id=novel_id, chapter_id=chapter_id, chapter_number=chapter_number,
                           action="no_rewrite_sflog", mode="sflog", attempt=attempt,
                           hard_before=len(hard_before), hard_after=len(hard))
             # continue loop with possibly-updated records
@@ -251,7 +252,7 @@ def evaluate(
     )
 
     if prose_result.rollback_signal:
-        self._log(novel_id=novel_id, chapter_id=chapter_id, chapter_number=bible_snapshot.chapter_id,
+        self._log(novel_id=novel_id, chapter_id=chapter_id, chapter_number=chapter_number,
                   action="forced_pass_rollback_llm", mode="prose", attempt=3,
                   hard_before=len(hard_before), hard_after=len(hard_before),
                   notes="llm_signal_REQUIRES_PROSE_ROLLBACK")
@@ -259,7 +260,7 @@ def evaluate(
                            notes="prose_rollback"), None
 
     # Re-parse new text, re-evaluate
-    new_records = self.parse_prose(prose_result.new_chapter_text, bible_snapshot.chapter_id)
+    new_records = self.parse_prose(prose_result.new_chapter_text, chapter_number)
     new_hits = self.engine.evaluate_chapter(new_records,
                                              prose_result.new_chapter_text,
                                              bible_snapshot)
@@ -267,15 +268,15 @@ def evaluate(
 
     if len(new_hard) <= len(hard_before):
         # Accept: keep rewrite (better or equal on hard-hit count)
-        self._log(novel_id=novel_id, chapter_id=chapter_id, chapter_number=bible_snapshot.chapter_id,
+        self._log(novel_id=novel_id, chapter_id=chapter_id, chapter_number=chapter_number,
                   action="rewritten_prose", mode="prose", attempt=3,
                   hard_before=len(hard_before), hard_after=len(new_hard),
-                  diff_excerpt=_diff(original_chapter_text, prose_result.new_chapter_text))
+                  diff_excerpt=_format_diff_excerpt(original_chapter_text, prose_result.new_chapter_text))
         return GuardReport(passed=True, forced_pass=True, attempt=3, hits=new_hits,
                            notes=f"prose_rewrite hard={len(new_hard)}"), prose_result.new_chapter_text
 
     # Regression: rollback to original
-    self._log(novel_id=novel_id, chapter_id=chapter_id, chapter_number=bible_snapshot.chapter_id,
+    self._log(novel_id=novel_id, chapter_id=chapter_id, chapter_number=chapter_number,
               action="rolled_back_regression", mode="prose", attempt=3,
               hard_before=len(hard_before), hard_after=len(new_hard),
               notes="prose_rewrite_increased_hard")
@@ -284,6 +285,10 @@ def evaluate(
 ```
 
 `_log()` writes one row to `audit_repo` if present (silent no-op otherwise).
+
+`_format_diff_excerpt(before, after)` slices both sides to 250 chars around the first divergence (Hamming-style midpoint lookup, or simpler: 250 chars from start of each), returns `f"{before_250}<<<>>>{after_250}"`. Total ≤ 503 chars.
+
+`chapter_id` (kwarg) is the SQLite rowid (for foreign key); `chapter_number` (from `bible_snapshot.chapter_id`) is the human-readable chapter number for display. Both go into the audit row.
 
 ### Behavior under infrastructure failure
 
@@ -314,15 +319,18 @@ from typing import Callable, Optional, Protocol
 
 from application.ai_invocation.prompt_assembler import CPMSPromptAssembler
 from application.sf_log.fact_guard_service import (
-    FactGuardAuditRepository,
     ProseRewriteFn,
     SFLogRewriteFn,
     ParseFn,
     ProseRewriteResult,
     SFLogRewriteResult,
 )
+# FactGuardAuditRepository lives in infrastructure/persistence/sqlite/
+# (defined in §5). Imported lazily inside append() to avoid circular import
+# between domain/application layers and infrastructure.
 from domain.storyos.value_objects.sf_log import SFLogRecord
 from domain.sf_log.guard_report import GuardHit
+# ... deferred import for FactGuardAuditRepository at first use site
 
 
 class LLMProviderProtocol(Protocol):
@@ -555,29 +563,50 @@ async def get_chapter_fact_guard_history(
 ) -> List[FactGuardLogDTO]:
     """Audit trail of every fact_guard attempt (sflog × 2 + prose × 1)."""
     chapter_id = _resolve_chapter_id(novel_id, chapter_number)
+    if chapter_id is None:
+        raise HTTPException(status_code=404, detail="chapter not found")
     page = repo.list_for_chapter(chapter_id)
     return [FactGuardLogDTO.from_row(r) for r in page.rows]
 ```
 
-### Plumbing rewritten prose through Step 6
+### `_resolve_chapter_id(novel_id, chapter_number) → Optional[int]`
 
-`_hook_step5_post_write_gate` adds to its return dict:
+Simple synchronous lookup; no caching in Phase 2B (Q3 defers caching to 2C):
 
 ```python
+def _resolve_chapter_id(novel_id: str, chapter_number: int) -> Optional[int]:
+    """Return the SQLite rowid of `chapters` matching (novel_id, chapter_number).
+
+    None if no such chapter exists.
+    """
+    with sqlite3.connect(get_db_path()) as conn:
+        cur = conn.execute(
+            "SELECT id FROM chapters WHERE novel_id = ? AND chapter_number = ? LIMIT 1",
+            (novel_id, chapter_number),
+        )
+        row = cur.fetchone()
+        return row[0] if row else None
+```
+
+Lives in `interfaces/api/v1/core/chapters.py` alongside `_resolve_chapter_id`'s existing sibling helpers; if the codebase already has a chapter_id lookup pattern, use that instead.
+
+### Plumbing rewritten prose through Step 6
+
+`_hook_step5_post_write_gate` calls `svc.evaluate(...)` which returns `Tuple[GuardReport, Optional[str]]`. The hook unwraps and threads `rewritten_chapter_text` into the return dict:
+
+```python
+report, rewritten_text = svc.evaluate(text, records, bible_snapshot, novel_id=..., chapter_id=...)
+
 return {
     "format_errors": format_errors,
     "records": records,
     "match_report": match_report,
-    "fact_guard_report": fact_guard_report,
-    "rewritten_chapter_text": (
-        prose_result.new_chapter_text           # when prose rewrite was kept
-        if prose_rewrite_kept
-        else text                                # original text otherwise
-    ),
+    "fact_guard_report": report,
+    "rewritten_chapter_text": rewritten_text if rewritten_text is not None else text,
 }
 ```
 
-The caller reads `rewritten_chapter_text` and feeds it into the save path. If it equals `text`, no-op. Otherwise, save the rewritten version.
+The Step 5 caller (`BaseStoryPipeline._run_step5_post_write_gate`) reads `rewritten_chapter_text` and feeds it into the save path. If `rewritten_chapter_text == text`, the save is a no-op. Otherwise, the rewritten version is saved.
 
 ### Three new helpers on `BaseStoryPipeline` (1-3 lines each)
 
@@ -590,11 +619,14 @@ def _get_llm_provider(self, ctx):
     )
 
 def _get_fact_guard_audit_repo(self, ctx):
-    return getattr(self._app_state, "fact_guard_audit_repo", InMemoryAuditRepo())
+    """Default to a no-op repository if app_state doesn't wire one (test/dev)."""
+    return getattr(self._app_state, "fact_guard_audit_repo", NOOP_AUDIT_REPO)
 
 def _get_fact_guard_text_cap(self, ctx) -> int:
     return getattr(self._app_state, "fact_guard_text_cap_chars", 6000)
 ```
+
+`NOOP_AUDIT_REPO` is a module-level singleton: a `FactGuardAuditRepository`-shaped no-op whose `append` is `lambda row: 0`. Defined in `application/sf_log/fact_guard_cpms.py` as a fallback, never raised to logger-spam level.
 
 App-state registration in `interfaces/main.py`:
 
@@ -661,7 +693,7 @@ Mirroring Phase 2A's `scripts/check_phase_2a_metrics.py`, a `scripts/check_phase
 | Unit tests pass | 100% (added 28 prose-path tests) |
 | Phase 2A tests still pass | 100% |
 | Regression corpus pass rate | ≥ 80% |
-| Audit row counts: every chapter has ≥ 1 `attempted_sflog` row | 100% |
+| Audit row count per chapter | ≥ 1 (action ∈ {`passed`, `rewritten_sflog`, `no_rewrite_sflog`, `rewritten_prose`, `forced_pass_rollback_llm`, `rolled_back_regression`, `provider_failed`, `node_missing`}) |
 | `storyos_fact_guard_logs` table created post-migration | yes |
 | Python 3.9 compat | preserved |
 
@@ -685,7 +717,7 @@ Mirroring Phase 2A's `scripts/check_phase_2a_metrics.py`, a `scripts/check_phase
 
 | # | Question | Why open | Where to revisit |
 |---|----------|---------|------------------|
-| Q1 | Should `fact_guard_audit_repo` route through `WriteDispatch`? | Spec assumes direct DB; codebase CLAUDE.md says all SQLite writes go through Write Dispatch. | Writing-plans pass + integration test for WriteDispatch path. |
+| Q1 | ~~Should `fact_guard_audit_repo` route through `WriteDispatch`?~~ **RESOLVED: yes.** See decision D1 below. | — | — |
 | Q2 | Same DB as `data/plotpilot.db` or separate `data/fact_guard.db`? | Spec assumes same DB for simplicity. | If Phase 2C UI requires high-velocity reads, separate may justify migration. |
 | Q3 | Does `_resolve_chapter_id(novel_id, chapter_number)` need a memoized cache? | Probably yes at scale. | Phase 2C profile-driven addition. |
 | Q4 | Admin endpoint `force_prose_rewrite`? | Useful for debugging. | Add in 2C alongside history UI. |
@@ -693,6 +725,65 @@ Mirroring Phase 2A's `scripts/check_phase_2a_metrics.py`, a `scripts/check_phase
 | Q6 | Token-level retry of partial LLM responses? | Spec treats as `provider_failed` → rollback. | Configurable per-provider retry policy. |
 | Q7 | Bump `diff_excerpt` from 500 to 1000 chars? | Tunable in `fact_guard_cpms.yaml`. | 2C review feedback. |
 | Q8 | Will Phase 2A `ctx.metadata["storyos_warnings"]` shape need to change? | Spec assumes no. Backward compatible. | Confirm during 2C review UI integration. |
+
+### Resolved decisions
+
+**D1. Audit writes route through `WriteDispatch`.** `CLAUDE.md` mandates "All SQLite writes go through a single-writer dispatcher (`Write Dispatch`)". Although fact_guard audit is append-only and low-frequency, the rule is a hard project convention.
+
+**Implementation:**
+
+```python
+# in infrastructure/persistence/sqlite/storyos_fact_guard_logs_repository.py
+
+from infrastructure.persistence.database.write_dispatch import WriteDispatch
+
+class FactGuardAuditRepository:
+    def __init__(self, db_path: str) -> None:
+        self._db_path = db_path
+
+    def append(self, row: FactGuardLogRow) -> int:
+        """Queues the INSERT into WriteDispatch; returns 0 immediately.
+        Read the actual rowid by querying the dispatcher after a small
+        settle window, or accept "no rowid returned" semantics for audit.
+
+        Audit writes are not on the critical path; failure here is silent
+        (no-op equivalent to direct-DB exception swallowing).
+        """
+        try:
+            return WriteDispatch.enqueue_txn_batch(
+                self._db_path,
+                self._insert_callable,
+                (row,),
+            ) or 0
+        except Exception:                       # noqa: BLE001
+            return 0
+
+    @staticmethod
+    def _insert_callable(conn, row: FactGuardLogRow) -> int:
+        """Runs on the dispatcher thread with a TxnCollectingConnection."""
+        cur = conn.execute(
+            """
+            INSERT INTO storyos_fact_guard_logs
+              (chapter_id, chapter_number, novel_id, attempt, mode,
+               action, hard_before, hard_after,
+               rule_id, severity, diff_excerpt, notes)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                row.chapter_id, row.chapter_number, row.novel_id,
+                row.attempt, row.mode, row.action,
+                row.hard_before, row.hard_after,
+                row.rule_id, row.severity, row.diff_excerpt, row.notes,
+            ),
+        )
+        return cur.lastrowid or 0
+```
+
+`enqueue_txn_batch` returns the lastrowid when the batch flushes; this is non-deterministic from the caller's perspective because the dispatcher batches writes. For audit we accept "0 means queued or failed" — `list_for_chapter` reads what's actually persisted.
+
+Reads (the `GET /chapters/{id}/fact-guard-history` endpoint) use a regular `sqlite3.Connection` read; WriteDispatch is write-only.
+
+---
 
 ### YAGNI list
 
