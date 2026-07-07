@@ -38,6 +38,40 @@ def _read_shared_state(novel_id: str) -> Dict[str, Any]:
     return read_autopilot_shared_state(novel_id)
 
 
+async def _post_chapter_storyos_bridge(
+    host: Any,
+    novel_id: str,
+    chapter_number: int,
+    chapter_content: str,
+) -> None:
+    """legacy 写作路径的最小 Step 5/6：解析 SF_LOG → evolution_bridge 双写。
+
+    依赖 host.storyos_delegate（由 init_daemon_dependencies 在 daemon_host.py:96 注入）。
+    未配置则降级返回（与 main pipeline 的 graceful degradation 一致）。
+    """
+    delegate = getattr(host, "storyos_delegate", None)
+    if delegate is None:
+        logger.debug("[%s] legacy 路径未配置 storyos_delegate，跳过桥接", novel_id)
+        return
+    try:
+        from domain.storyos.value_objects.predeclared import PredeclaredChanges
+        result = delegate.apply_post_write_results(
+            novel_id=novel_id,
+            chapter_id=chapter_number,
+            text=chapter_content,
+            predeclared=PredeclaredChanges(),  # legacy 无 predeclared 阶段
+        )
+    except Exception as exc:
+        logger.warning(
+            "[%s] legacy StoryOS 桥接失败（不影响主流程）: %s", novel_id, exc,
+        )
+        return
+    logger.info(
+        "[%s] legacy StoryOS 桥接完成 success=%s events=%s",
+        novel_id, getattr(result, "success", None), getattr(result, "sflog_events_recorded", 0),
+    )
+
+
 def _build_adopted_chapter_plan(
     *,
     payload: Dict[str, Any],
@@ -1247,6 +1281,15 @@ async def run_legacy_writing(host: Any, novel: Novel) -> None:
         writing_substep_label="章节落盘",
     )
     await host._upsert_chapter_content(novel, next_chapter_node, chapter_content, status="completed")
+
+    # StoryOS tier_0 最小 Step 5/6 等价：legacy 路径下也解析 + 桥接 SF_LOG
+    try:
+        await _post_chapter_storyos_bridge(host, novel.novel_id.value, chapter_num, chapter_content)
+    except Exception as _se:
+        logger.warning(
+            "[%s] legacy 路径 StoryOS 桥接失败（不影响主流程）: %s",
+            novel.novel_id.value, _se,
+        )
 
     # 🔥 落库后用短连接读真实聚合，刷新 /status 缓存（与接口 SQL 一致）
     st = host._read_chapter_stats_ephemeral(novel.novel_id.value)

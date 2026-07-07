@@ -32,6 +32,8 @@ class ScenePlan:
     chapter_id: int
     outline: str
     beats: List[Any] = field(default_factory=list)
+    # TODO(Tier0-phase-2): 生产端尚无 producer 填充该字段，目前在 production 中恒为空。
+    # Step 3/5/6 的 `if predeclared_changes:` 守卫自动降级，不影响主流程。
     predeclared_changes: PredeclaredChanges = field(
         default_factory=PredeclaredChanges
     )

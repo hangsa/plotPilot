@@ -1,7 +1,9 @@
 """Prose composition strategies for StoryPipeline."""
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, Callable, Mapping, Protocol
 
 from application.ai_invocation.contracts.autopilot_writing import (
@@ -10,7 +12,22 @@ from application.ai_invocation.contracts.autopilot_writing import (
 )
 from application.ai_invocation.dtos import InvocationSessionStatus
 from infrastructure.ai.prompt_keys import CHAPTER_PROSE_GENERATION
+from infrastructure.ai.prompt_template_engine import get_template_engine
 from engine.runtime.generation_token_policy import CHAPTER_PROSE_MAX_TOKENS
+
+
+_SFLOG_DIRECTIVE_J2 = (
+    Path(__file__).resolve().parents[2]
+    / "infrastructure"
+    / "ai"
+    / "prompt_packages"
+    / "nodes"
+    / "chapter-prose-generation"
+    / "sflog_directive.j2"
+)
+
+
+logger = logging.getLogger(__name__)
 
 
 StreamSink = Callable[[str], None]
@@ -64,11 +81,38 @@ class ChapterProseInvocationComposer:
             str(metadata.get("continuity_context") or "").strip()
             or str(request.context_text or "").strip()
         )
+        sflog_directive = self._render_sflog_directive(metadata)
         return {
             "target_words": int(request.target_words or 2500),
             "chapter_outline": request.outline,
             "continuity_context": continuity_context,
+            "sflog_directive": sflog_directive,
         }
+
+    def _render_sflog_directive(self, metadata: Mapping[str, Any]) -> str:
+        """StoryOS tier_0 — 渲染 sflog_directive.j2 注入 LLM 上下文。
+
+        package.yaml 已声明 sflog_directive 变量（type=string, default=''）；
+        CPMS 框架会把 explicit_variables['sflog_directive'] 传给 template_engine.render。
+        若模板/引擎/文件路径不可用，降级返回空字符串——主流程不受影响。
+        """
+        if not _SFLOG_DIRECTIVE_J2.is_file():
+            return ""
+        try:
+            template_text = _SFLOG_DIRECTIVE_J2.read_text(encoding="utf-8")
+            predeclared_summary = str(
+                metadata.get("storyos_predeclared_summary") or "（无）"
+            )
+            rendered, _missing, _rendered_vars = get_template_engine()._render_template(
+                template_text,
+                {"predeclared_changes": predeclared_summary},
+            )
+            return rendered or ""
+        except Exception as exc:
+            logger.warning(
+                "[prose_composer] sflog_directive 渲染失败，回退空字符串: %s", exc,
+            )
+            return ""
 
     @staticmethod
     def _max_output_tokens(request: ProseCompositionRequest) -> int:
