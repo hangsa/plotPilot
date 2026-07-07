@@ -7,17 +7,25 @@ Inputs:
 
 Retry invariant: prose body NEVER changes; only SF_LOG records get rewritten.
 
+Phase 2B additions: ProseRewriteResult + SFLogRewriteResult value objects
+and callable type aliases for sf_log / prose invokers and the SF_LOG parser.
+
 Python 3.9 compat: `from __future__ import annotations` defers `Optional[list]` etc.
 """
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Callable, List, Optional
+from typing import TYPE_CHECKING, Callable, List, Optional
 
 from application.sf_log.bible_snapshot import ChapterBibleContext
 from application.sf_log.regex_engine import RegexEngine
 from domain.sf_log.guard_report import GuardReport, GuardHit, Severity
 from domain.storyos.value_objects.sf_log import SFLogRecord
+
+if TYPE_CHECKING:
+    from infrastructure.persistence.sqlite.storyos_fact_guard_logs_repository import (
+        FactGuardAuditRepository,
+    )
 
 
 # CPMS invoker signature; injected from pipeline hook (Task 8)
@@ -64,3 +72,37 @@ class FactGuardService:
         return GuardReport(
             passed=True, forced_pass=True, attempt=3, hits=hits,
         )
+
+
+# ── Phase 2B: prose rewrite value objects + callable type aliases ──
+
+
+@dataclass(frozen=True)
+class SFLogRewriteResult:
+    """Outcome of a `sf_log_invoker` call. Records are the rewritten
+    SF_LOG comment block; chapter text is unchanged.
+    """
+    records: List[SFLogRecord]
+    mode: str = "sflog"                           # for symmetry; only "sflog" today
+
+
+@dataclass(frozen=True)
+class ProseRewriteResult:
+    """Outcome of a `prose_invoker` call. The `new_chapter_text` is the
+    rewritten prose; `new_records` is parsed from that text. If
+    `rollback_signal` is True the caller MUST discard the rewrite.
+    """
+    new_chapter_text: str
+    new_records: List[SFLogRecord]
+    rollback_signal: bool = False
+
+
+SFLogRewriteFn = Callable[
+    [List[SFLogRecord], List[GuardHit], int],
+    Optional[SFLogRewriteResult],
+]
+ProseRewriteFn = Callable[
+    [str, List[SFLogRecord], List[GuardHit], int],
+    ProseRewriteResult,
+]
+ParseFn = Callable[[str, int], List[SFLogRecord]]   # (text, chapter_number) → records
