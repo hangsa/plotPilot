@@ -28,6 +28,9 @@ from engine.pipeline.telemetry import story_pipeline_wave_meta
 
 logger = logging.getLogger(__name__)
 
+# ── PHASE 2A ── fact_guard engine cache (loaded lazily once per process)
+_FACT_GUARD_ENGINE = None
+
 def _writing_progress(
     ctx: PipelineContext,
     substep: str,
@@ -1386,7 +1389,11 @@ class BaseStoryPipeline(ABC):
                 from application.sf_log.regex_engine import RegexEngine
                 from application.sf_log.bible_snapshot import ChapterBibleContext
 
-                engine = RegexEngine.from_yaml("config/fact_guard_rules.yaml")
+                # Phase 2A: lazy module-level cache so we don't re-parse YAML per chapter
+                global _FACT_GUARD_ENGINE
+                if _FACT_GUARD_ENGINE is None:
+                    _FACT_GUARD_ENGINE = RegexEngine.from_yaml("config/fact_guard_rules.yaml")
+                engine = _FACT_GUARD_ENGINE
 
                 def _cpms_invoker(records, hits, attempt):  # noqa: ANN001
                     # Phase 2A: CPMS invoke via prose_composer-equivalent path.
