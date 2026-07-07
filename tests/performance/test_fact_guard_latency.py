@@ -7,6 +7,10 @@ upfront so the per-iteration timing isolates the evaluate() call.
 NOTE (correction 2): `@pytest.mark.slow` (defined in pytest.ini) rather than
 `@pytest.mark.performance`; the latter is not registered and `--strict-markers`
 would reject it.
+
+Phase 2B Task 5: `cpms_invoker` was split into `sflog_invoker` +
+`prose_invoker` + `parse_prose`. The latency measurement isolates the
+3-attempt loop, so we still supply no-op invokers.
 """
 from __future__ import annotations
 
@@ -15,16 +19,38 @@ import time
 import pytest
 
 from application.sf_log.bible_snapshot import ChapterBibleContext
-from application.sf_log.fact_guard_service import FactGuardService
+from application.sf_log.fact_guard_service import (
+    FactGuardService,
+    ProseRewriteResult,
+)
 from application.sf_log.regex_engine import RegexEngine
 from domain.storyos.contracts import SFLogType
 from domain.storyos.value_objects.sf_log import SFLogRecord
 
 
+def _no_op_sflog(records, hits, attempt):
+    return None
+
+
+def _no_op_prose(text, records, hits, attempt):
+    return ProseRewriteResult(
+        new_chapter_text=text, new_records=records, rollback_signal=True,
+    )
+
+
+def _no_op_parse(text, chapter_number):
+    return []
+
+
 @pytest.mark.slow
 def test_fact_guard_p95_under_100ms():
     engine = RegexEngine.from_yaml("config/fact_guard_rules.yaml")
-    svc = FactGuardService(engine=engine, cpms_invoker=lambda *a, **k: None)
+    svc = FactGuardService(
+        engine=engine,
+        sflog_invoker=_no_op_sflog,
+        prose_invoker=_no_op_prose,
+        parse_prose=_no_op_parse,
+    )
     bible = ChapterBibleContext(
         chapter_id=1,
         scene_cast_ids=frozenset({"alice"}),
@@ -50,6 +76,7 @@ def test_fact_guard_p95_under_100ms():
             chapter_text=chapter_text,
             sflog_records=records,
             bible_snapshot=bible,
+            novel_id="n", chapter_id=1,
         )
         timings.append(time.perf_counter() - start)
 

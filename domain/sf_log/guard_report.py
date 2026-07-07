@@ -39,6 +39,7 @@ class GuardReport:
     forced_pass: bool
     attempt: int
     hits: List[GuardHit] = field(default_factory=list)
+    notes: Optional[str] = None  # Phase 2B: free-form provenance (prose_rollback_regression etc.)
 
     def hard_hits(self) -> List[GuardHit]:
         return [h for h in self.hits if h.severity is Severity.HARD]

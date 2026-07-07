@@ -1395,10 +1395,29 @@ class BaseStoryPipeline(ABC):
                     _FACT_GUARD_ENGINE = RegexEngine.from_yaml("config/fact_guard_rules.yaml")
                 engine = _FACT_GUARD_ENGINE
 
-                def _cpms_invoker(records, hits, attempt):  # noqa: ANN001
-                    # Phase 2A: CPMS invoke via prose_composer-equivalent path.
-                    # Stub for now: real wiring is in writing_orchestrator integration.
-                    return None  # → service treats as CPMS unavailable → force-pass
+                def _sflog_invoker(records, hits, attempt):  # noqa: ANN001
+                    # Phase 2B Task 5: real wiring is in writing_orchestrator
+                    # integration (Task 8). Stub returns None → service treats
+                    # as rewrite-unavailable → continues to attempt 2 + prose.
+                    return None
+
+                def _prose_invoker(text, records, hits, attempt):  # noqa: ANN001
+                    # Phase 2B Task 5: stub returns rollback_signal=True so
+                    # attempt 3 produces forced_pass without rewriting text.
+                    from application.sf_log.fact_guard_service import (
+                        ProseRewriteResult,
+                    )
+                    return ProseRewriteResult(
+                        new_chapter_text=text,
+                        new_records=records,
+                        rollback_signal=True,
+                    )
+
+                def _parse_prose(text, chapter_number):  # noqa: ANN001
+                    # Phase 2B Task 5: real wiring in Task 8. Stub returns
+                    # empty record list — prose is never re-parsed under the
+                    # rollback_signal=True path above.
+                    return []
 
                 bible_snapshot = getattr(ctx, "chapter_bible_snapshot", None)
                 if bible_snapshot is None:
@@ -1413,11 +1432,18 @@ class BaseStoryPipeline(ABC):
                         worldbuilding_links={},
                     )
 
-                svc = FactGuardService(engine=engine, cpms_invoker=_cpms_invoker)
-                fact_guard_report = svc.evaluate(
+                svc = FactGuardService(
+                    engine=engine,
+                    sflog_invoker=_sflog_invoker,
+                    prose_invoker=_prose_invoker,
+                    parse_prose=_parse_prose,
+                )
+                fact_guard_report, _rewritten_text = svc.evaluate(
                     chapter_text=text or "",
                     sflog_records=records or [],
                     bible_snapshot=bible_snapshot,
+                    novel_id=str(getattr(ctx, "novel_id", "") or ""),
+                    chapter_id=int(getattr(ctx, "chapter_id", 0) or 0),
                 )
                 ctx.metadata["fact_guard_passed"] = fact_guard_report.passed
                 ctx.metadata["fact_guard_forced_pass"] = fact_guard_report.forced_pass
