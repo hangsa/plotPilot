@@ -30,6 +30,7 @@ from application.world.services.knowledge_service import KnowledgeService
 from infrastructure.persistence.database.chapter_draft_repository import ChapterDraftRepository
 from application.paths import get_db_path
 from domain.shared.exceptions import EntityNotFoundError
+from domain.novel.value_objects.novel_id import NovelId
 logger = logging.getLogger(__name__)
 
 
@@ -581,3 +582,26 @@ async def list_chapter_drafts(
         )
         for r in records
     ]
+
+
+@router.get("/{novel_id}/chapters/{chapter_number}/warnings")
+async def get_chapter_warnings(
+    novel_id: str,
+    chapter_number: int = Path(..., gt=0, description="章节编号"),
+    repo=Depends(get_chapter_repository),
+) -> dict:
+    """Get Phase 2A fact_guard warnings for a chapter (spec §7).
+
+    Returns: {chapter_id, warnings: list[dict]}
+    404 if chapter not found.
+    """
+    chapter = repo.get_by_novel_and_number(NovelId(novel_id), chapter_number)
+    if chapter is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Chapter not found: {novel_id}/chapter-{chapter_number}",
+        )
+    return {
+        "chapter_id": str(chapter.id),
+        "warnings": chapter.warnings or [],
+    }
