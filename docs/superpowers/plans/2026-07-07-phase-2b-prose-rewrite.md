@@ -318,8 +318,8 @@ CREATE INDEX IF NOT EXISTS idx_fact_guard_logs_chapter
 
 - [ ] **Step 2: Run migration**
 
-Run: `python scripts/setup/init_database.py`
-Expected: no errors; the runner picks up `2026_07_07_*` files in lexicographic order.
+Run: `python scripts/run_migrations.py`
+Expected: no errors; the runner picks up `2026_07_07_*` files in lexicographic order and records each applied migration in `migrations_applied`.
 
 - [ ] **Step 3: Verify table exists**
 
@@ -2886,6 +2886,8 @@ Run:
 sqlite3 data/plotpilot.db "SELECT COUNT(*) FROM storyos_fact_guard_logs;"
 ```
 Expected: ≥ 0 (table exists; rows depend on whether pipeline ran during tests).
+
+Note: The legacy `python scripts/setup/init_database.py` only loads `schema.sql` into `data/novels.db` and is NOT the migration entry point. The active migration runner is `python scripts/run_migrations.py`.
 
 Run a manual smoke:
 ```bash

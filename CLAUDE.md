@@ -20,8 +20,8 @@ python scripts/start_daemon.py
 # Toggle to legacy writing path if needed:
 #   PLOTPILOT_USE_STORY_PIPELINE=off python scripts/start_daemon.py
 
-# Database initialization (creates data/plotpilot.db, runs migrations)
-python scripts/setup/init_database.py
+# Database migrations (idempotent; tracks applied files in migrations_applied)
+python scripts/run_migrations.py
 
 # Frontend — dev server (port 3000, proxies /api → 8005)
 # `predev` hook auto-runs scripts/sync-builtin-taxonomy.mjs first
@@ -139,7 +139,7 @@ interfaces/       # Interface layer — external boundaries
 
 shared/           # Cross-end taxonomy & classification resources (not part of DDD layers)
 config/           # Runtime YAML — generation_profiles, policy_packs, performance, genre_packs
-scripts/          # Operational scripts (start_daemon, init_database, migrations, evaluation)
+scripts/          # Operational scripts (start_daemon, run_migrations, evaluation)
 docs/             # ARCHITECTURE.md, BUILD_INSTALLER.md, embedding download guide, screenshots
 ```
 
