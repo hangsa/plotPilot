@@ -11,6 +11,8 @@
 - WAL 模式：读写不阻塞
 - 事务保证：ACID 特性
 """
+from __future__ import annotations
+
 import json
 import logging
 import sqlite3

@@ -1,4 +1,6 @@
 """Claude 章节摘要生成器实现"""
+from __future__ import annotations
+
 from domain.ai.services.chapter_summarizer import ChapterSummarizer
 from domain.ai.services.llm_service import LLMService
 from infrastructure.ai.generation_profiles import generation_config_from_profile

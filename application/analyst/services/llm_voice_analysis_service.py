@@ -10,6 +10,8 @@
 
 成本：约 500 token/章（300 输入 + 200 输出）
 """
+from __future__ import annotations
+
 import json
 import logging
 import time

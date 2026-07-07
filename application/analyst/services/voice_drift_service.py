@@ -6,6 +6,8 @@
 
 连续 N 章低于阈值时发出告警。
 """
+from __future__ import annotations
+
 import re
 import logging
 import time

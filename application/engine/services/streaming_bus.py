@@ -10,6 +10,8 @@ Windows 兼容性：
 - mp.Queue 可以安全地 pickle 序列化并传递给子进程
 - 单一数据通道，避免本地缓冲与队列不同步
 """
+from __future__ import annotations
+
 import multiprocessing as mp
 import threading
 import time

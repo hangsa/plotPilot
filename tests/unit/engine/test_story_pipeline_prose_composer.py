@@ -44,11 +44,20 @@ def test_chapter_prose_composer_builds_only_core_prompt_variables():
 
     variables = composer._build_variables(request)
 
-    assert variables == {
-        "target_words": 2000,
-        "chapter_outline": "七段细纲",
-        "continuity_context": "前3章规划",
+    # Phase 2A: sflog_directive 加入变量集；其他元数据字段不允许泄漏到 prompt
+    assert set(variables.keys()) == {
+        "target_words",
+        "chapter_outline",
+        "continuity_context",
+        "sflog_directive",
     }
+    assert variables["target_words"] == 2000
+    assert variables["chapter_outline"] == "七段细纲"
+    assert variables["continuity_context"] == "前3章规划"
+    # 关键防护：metadata 里的字段不应作为独立变量出现在 prompt 变量集中
+    for forbidden in ("key_plot_points", "chapter_characters", "chapter_plan_json",
+                      "previous_summary", "previous_ending"):
+        assert forbidden not in variables
 
 
 @pytest.mark.asyncio

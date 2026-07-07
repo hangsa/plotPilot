@@ -1,4 +1,6 @@
 """OpenAI LLM 提供商实现"""
+from __future__ import annotations
+
 import asyncio
 import logging
 import openai

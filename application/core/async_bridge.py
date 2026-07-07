@@ -67,16 +67,29 @@ def run_coroutine_sync(
     try:
         asyncio.get_running_loop()
     except RuntimeError:
-        return asyncio.run(_await_with_optional_timeout(coroutine_factory, timeout))
+        try:
+            return asyncio.run(_await_with_optional_timeout(coroutine_factory, timeout))
+        except asyncio.TimeoutError as exc:
+            # Python 3.9: asyncio.TimeoutError ≠ builtin TimeoutError;
+            # normalize so callers can catch either consistently.
+            raise TimeoutError(str(exc)) from exc
 
-    future = _get_executor().submit(
-        lambda: asyncio.run(_await_with_optional_timeout(coroutine_factory, timeout))
-    )
+    def _runner() -> T:
+        try:
+            return asyncio.run(_await_with_optional_timeout(coroutine_factory, timeout))
+        except asyncio.TimeoutError as exc:
+            # Python 3.9: executor's asyncio.run raises asyncio.TimeoutError
+            # (also ≠ builtin TimeoutError); normalize.
+            raise TimeoutError(str(exc)) from exc
+
+    future = _get_executor().submit(_runner)
     try:
         return future.result(timeout=timeout)
     except FuturesTimeoutError:
         future.cancel()
-        raise
+        # Python 3.9: concurrent.futures.TimeoutError ≠ builtin TimeoutError;
+        # normalize so callers can catch either consistently.
+        raise TimeoutError("coroutine bridge timed out") from None
 
 
 def shutdown_async_bridge_executor_if_initialized() -> None:

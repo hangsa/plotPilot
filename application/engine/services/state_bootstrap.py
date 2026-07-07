@@ -10,6 +10,8 @@
 - 加载失败不影响系统启动，返回默认值
 - 支持增量加载（只加载活跃小说）
 """
+from __future__ import annotations
+
 import logging
 import time
 from typing import Any, Dict, List, Optional

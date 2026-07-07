@@ -1,4 +1,6 @@
 """自动 Bible 生成器 - 从小说标题生成完整的人物、地点、风格设定和世界观"""
+from __future__ import annotations
+
 import logging
 import json
 import uuid

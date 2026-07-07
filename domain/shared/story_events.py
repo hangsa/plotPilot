@@ -11,12 +11,16 @@ from typing import Any, Dict
 from domain.shared.time_utils import utcnow
 
 
-@dataclass(frozen=True, kw_only=True)
+# Python 3.9 doesn't support dataclass(kw_only=True) (added in 3.10).
+# To allow subclasses below to override `event_type`/`story_id` with concrete
+# defaults, the parent declares those fields with empty defaults. All call
+# sites pass concrete values, so behavior is preserved.
+@dataclass(frozen=True)
 class StoryDomainEvent:
     """故事引擎领域事件基类（不可变）"""
 
-    event_type: str
-    story_id: str
+    event_type: str = ""
+    story_id: str = ""
     timestamp: str = field(default_factory=lambda: utcnow().isoformat())
     source: str = ""
     trace_id: str = ""
@@ -35,7 +39,7 @@ class StoryDomainEvent:
         return result
 
 
-@dataclass(frozen=True, kw_only=True)
+@dataclass(frozen=True)
 class ChapterCompletedEvent(StoryDomainEvent):
     """章节完成事件"""
 
@@ -57,7 +61,7 @@ class ChapterCompletedEvent(StoryDomainEvent):
         }
 
 
-@dataclass(frozen=True, kw_only=True)
+@dataclass(frozen=True)
 class CharacterTraumaEvent(StoryDomainEvent):
     """角色创伤事件"""
 
@@ -81,7 +85,7 @@ class CharacterTraumaEvent(StoryDomainEvent):
         }
 
 
-@dataclass(frozen=True, kw_only=True)
+@dataclass(frozen=True)
 class ForeshadowStatusChangedEvent(StoryDomainEvent):
     """伏笔状态变更事件"""
 
@@ -103,7 +107,7 @@ class ForeshadowStatusChangedEvent(StoryDomainEvent):
         }
 
 
-@dataclass(frozen=True, kw_only=True)
+@dataclass(frozen=True)
 class PhaseTransitionEvent(StoryDomainEvent):
     """故事阶段转换事件"""
 

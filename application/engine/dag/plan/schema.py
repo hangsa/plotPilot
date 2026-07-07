@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-from enum import StrEnum
+from enum import Enum
 from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field
 
 
-class PlanDecompositionMode(StrEnum):
+class PlanDecompositionMode(str, Enum):
     """章前规划拆解来源。
 
     统一枚举可以避免调用链散落字符串常量，后续新增拆解器时只需扩展这里。

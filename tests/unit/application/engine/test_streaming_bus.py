@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from queue import Empty, Full
 
 from application.core.config.config_loader import reload_config
