@@ -1,0 +1,562 @@
+[
+  {
+    "chapter_number": 1,
+    "text": "第1章：alice 缓缓走向门口，<!-- SF_LOG character_location_change character_id=\"alice\" from=\"home\" to=\"gate\" -->\n她推开木门，街上的晨光透进来。",
+    "scene_cast": [
+      "alice"
+    ],
+    "worldbuilding_links": {
+      "home": [
+        "gate"
+      ],
+      "gate": [
+        "home"
+      ]
+    },
+    "sflog_records": [
+      {
+        "log_type": "character_location_change",
+        "params": {
+          "character_id": "alice",
+          "from": "home",
+          "to": "gate"
+        },
+        "raw": "<!-- SF_LOG character_location_change character_id=\"alice\" from=\"home\" to=\"gate\" -->",
+        "chapter_id": 1,
+        "char_position": 0
+      }
+    ]
+  },
+  {
+    "chapter_number": 2,
+    "text": "第2章：alice 缓缓走向门口，<!-- SF_LOG character_location_change character_id=\"alice\" from=\"home\" to=\"gate\" -->\n她推开木门，街上的晨光透进来。",
+    "scene_cast": [
+      "alice"
+    ],
+    "worldbuilding_links": {
+      "home": [
+        "gate"
+      ],
+      "gate": [
+        "home"
+      ]
+    },
+    "sflog_records": [
+      {
+        "log_type": "character_location_change",
+        "params": {
+          "character_id": "alice",
+          "from": "home",
+          "to": "gate"
+        },
+        "raw": "<!-- SF_LOG character_location_change character_id=\"alice\" from=\"home\" to=\"gate\" -->",
+        "chapter_id": 2,
+        "char_position": 0
+      }
+    ]
+  },
+  {
+    "chapter_number": 3,
+    "text": "第3章：alice 缓缓走向门口，<!-- SF_LOG character_location_change character_id=\"alice\" from=\"home\" to=\"gate\" -->\n她推开木门，街上的晨光透进来。",
+    "scene_cast": [
+      "alice"
+    ],
+    "worldbuilding_links": {
+      "home": [
+        "gate"
+      ],
+      "gate": [
+        "home"
+      ]
+    },
+    "sflog_records": [
+      {
+        "log_type": "character_location_change",
+        "params": {
+          "character_id": "alice",
+          "from": "home",
+          "to": "gate"
+        },
+        "raw": "<!-- SF_LOG character_location_change character_id=\"alice\" from=\"home\" to=\"gate\" -->",
+        "chapter_id": 3,
+        "char_position": 0
+      }
+    ]
+  },
+  {
+    "chapter_number": 4,
+    "text": "第4章：alice 缓缓走向门口，<!-- SF_LOG character_location_change character_id=\"alice\" from=\"home\" to=\"gate\" -->\n她推开木门，街上的晨光透进来。",
+    "scene_cast": [
+      "alice"
+    ],
+    "worldbuilding_links": {
+      "home": [
+        "gate"
+      ],
+      "gate": [
+        "home"
+      ]
+    },
+    "sflog_records": [
+      {
+        "log_type": "character_location_change",
+        "params": {
+          "character_id": "alice",
+          "from": "home",
+          "to": "gate"
+        },
+        "raw": "<!-- SF_LOG character_location_change character_id=\"alice\" from=\"home\" to=\"gate\" -->",
+        "chapter_id": 4,
+        "char_position": 0
+      }
+    ]
+  },
+  {
+    "chapter_number": 5,
+    "text": "第5章：alice 缓缓走向门口，<!-- SF_LOG character_location_change character_id=\"alice\" from=\"home\" to=\"gate\" -->\n她推开木门，街上的晨光透进来。",
+    "scene_cast": [
+      "alice"
+    ],
+    "worldbuilding_links": {
+      "home": [
+        "gate"
+      ],
+      "gate": [
+        "home"
+      ]
+    },
+    "sflog_records": [
+      {
+        "log_type": "character_location_change",
+        "params": {
+          "character_id": "alice",
+          "from": "home",
+          "to": "gate"
+        },
+        "raw": "<!-- SF_LOG character_location_change character_id=\"alice\" from=\"home\" to=\"gate\" -->",
+        "chapter_id": 5,
+        "char_position": 0
+      }
+    ]
+  },
+  {
+    "chapter_number": 6,
+    "text": "第6章：alice 缓缓走向门口，<!-- SF_LOG character_location_change character_id=\"alice\" from=\"home\" to=\"gate\" -->\n她推开木门，街上的晨光透进来。",
+    "scene_cast": [
+      "alice"
+    ],
+    "worldbuilding_links": {
+      "home": [
+        "gate"
+      ],
+      "gate": [
+        "home"
+      ]
+    },
+    "sflog_records": [
+      {
+        "log_type": "character_location_change",
+        "params": {
+          "character_id": "alice",
+          "from": "home",
+          "to": "gate"
+        },
+        "raw": "<!-- SF_LOG character_location_change character_id=\"alice\" from=\"home\" to=\"gate\" -->",
+        "chapter_id": 6,
+        "char_position": 0
+      }
+    ]
+  },
+  {
+    "chapter_number": 7,
+    "text": "第7章：alice 缓缓走向门口，<!-- SF_LOG character_location_change character_id=\"alice\" from=\"home\" to=\"gate\" -->\n她推开木门，街上的晨光透进来。",
+    "scene_cast": [
+      "alice"
+    ],
+    "worldbuilding_links": {
+      "home": [
+        "gate"
+      ],
+      "gate": [
+        "home"
+      ]
+    },
+    "sflog_records": [
+      {
+        "log_type": "character_location_change",
+        "params": {
+          "character_id": "alice",
+          "from": "home",
+          "to": "gate"
+        },
+        "raw": "<!-- SF_LOG character_location_change character_id=\"alice\" from=\"home\" to=\"gate\" -->",
+        "chapter_id": 7,
+        "char_position": 0
+      }
+    ]
+  },
+  {
+    "chapter_number": 8,
+    "text": "第8章：alice 缓缓走向门口，<!-- SF_LOG character_location_change character_id=\"alice\" from=\"home\" to=\"gate\" -->\n她推开木门，街上的晨光透进来。",
+    "scene_cast": [
+      "alice"
+    ],
+    "worldbuilding_links": {
+      "home": [
+        "gate"
+      ],
+      "gate": [
+        "home"
+      ]
+    },
+    "sflog_records": [
+      {
+        "log_type": "character_location_change",
+        "params": {
+          "character_id": "alice",
+          "from": "home",
+          "to": "gate"
+        },
+        "raw": "<!-- SF_LOG character_location_change character_id=\"alice\" from=\"home\" to=\"gate\" -->",
+        "chapter_id": 8,
+        "char_position": 0
+      }
+    ]
+  },
+  {
+    "chapter_number": 9,
+    "text": "第9章：alice 缓缓走向门口，<!-- SF_LOG character_location_change character_id=\"alice\" from=\"home\" to=\"gate\" -->\n她推开木门，街上的晨光透进来。",
+    "scene_cast": [
+      "alice"
+    ],
+    "worldbuilding_links": {
+      "home": [
+        "gate"
+      ],
+      "gate": [
+        "home"
+      ]
+    },
+    "sflog_records": [
+      {
+        "log_type": "character_location_change",
+        "params": {
+          "character_id": "alice",
+          "from": "home",
+          "to": "gate"
+        },
+        "raw": "<!-- SF_LOG character_location_change character_id=\"alice\" from=\"home\" to=\"gate\" -->",
+        "chapter_id": 9,
+        "char_position": 0
+      }
+    ]
+  },
+  {
+    "chapter_number": 10,
+    "text": "第10章：alice 缓缓走向门口，<!-- SF_LOG character_location_change character_id=\"alice\" from=\"home\" to=\"gate\" -->\n她推开木门，街上的晨光透进来。",
+    "scene_cast": [
+      "alice"
+    ],
+    "worldbuilding_links": {
+      "home": [
+        "gate"
+      ],
+      "gate": [
+        "home"
+      ]
+    },
+    "sflog_records": [
+      {
+        "log_type": "character_location_change",
+        "params": {
+          "character_id": "alice",
+          "from": "home",
+          "to": "gate"
+        },
+        "raw": "<!-- SF_LOG character_location_change character_id=\"alice\" from=\"home\" to=\"gate\" -->",
+        "chapter_id": 10,
+        "char_position": 0
+      }
+    ]
+  },
+  {
+    "chapter_number": 11,
+    "text": "第11章：alice 缓缓走向门口，<!-- SF_LOG character_location_change character_id=\"alice\" from=\"home\" to=\"gate\" -->\n她推开木门，街上的晨光透进来。",
+    "scene_cast": [
+      "alice"
+    ],
+    "worldbuilding_links": {
+      "home": [
+        "gate"
+      ],
+      "gate": [
+        "home"
+      ]
+    },
+    "sflog_records": [
+      {
+        "log_type": "character_location_change",
+        "params": {
+          "character_id": "alice",
+          "from": "home",
+          "to": "gate"
+        },
+        "raw": "<!-- SF_LOG character_location_change character_id=\"alice\" from=\"home\" to=\"gate\" -->",
+        "chapter_id": 11,
+        "char_position": 0
+      }
+    ]
+  },
+  {
+    "chapter_number": 12,
+    "text": "第12章：alice 缓缓走向门口，<!-- SF_LOG character_location_change character_id=\"alice\" from=\"home\" to=\"gate\" -->\n她推开木门，街上的晨光透进来。",
+    "scene_cast": [
+      "alice"
+    ],
+    "worldbuilding_links": {
+      "home": [
+        "gate"
+      ],
+      "gate": [
+        "home"
+      ]
+    },
+    "sflog_records": [
+      {
+        "log_type": "character_location_change",
+        "params": {
+          "character_id": "alice",
+          "from": "home",
+          "to": "gate"
+        },
+        "raw": "<!-- SF_LOG character_location_change character_id=\"alice\" from=\"home\" to=\"gate\" -->",
+        "chapter_id": 12,
+        "char_position": 0
+      }
+    ]
+  },
+  {
+    "chapter_number": 13,
+    "text": "第13章：alice 缓缓走向门口，<!-- SF_LOG character_location_change character_id=\"alice\" from=\"home\" to=\"gate\" -->\n她推开木门，街上的晨光透进来。",
+    "scene_cast": [
+      "alice"
+    ],
+    "worldbuilding_links": {
+      "home": [
+        "gate"
+      ],
+      "gate": [
+        "home"
+      ]
+    },
+    "sflog_records": [
+      {
+        "log_type": "character_location_change",
+        "params": {
+          "character_id": "alice",
+          "from": "home",
+          "to": "gate"
+        },
+        "raw": "<!-- SF_LOG character_location_change character_id=\"alice\" from=\"home\" to=\"gate\" -->",
+        "chapter_id": 13,
+        "char_position": 0
+      }
+    ]
+  },
+  {
+    "chapter_number": 14,
+    "text": "第14章：alice 缓缓走向门口，<!-- SF_LOG character_location_change character_id=\"alice\" from=\"home\" to=\"gate\" -->\n她推开木门，街上的晨光透进来。",
+    "scene_cast": [
+      "alice"
+    ],
+    "worldbuilding_links": {
+      "home": [
+        "gate"
+      ],
+      "gate": [
+        "home"
+      ]
+    },
+    "sflog_records": [
+      {
+        "log_type": "character_location_change",
+        "params": {
+          "character_id": "alice",
+          "from": "home",
+          "to": "gate"
+        },
+        "raw": "<!-- SF_LOG character_location_change character_id=\"alice\" from=\"home\" to=\"gate\" -->",
+        "chapter_id": 14,
+        "char_position": 0
+      }
+    ]
+  },
+  {
+    "chapter_number": 15,
+    "text": "第15章：alice 缓缓走向门口，<!-- SF_LOG character_location_change character_id=\"alice\" from=\"home\" to=\"gate\" -->\n她推开木门，街上的晨光透进来。",
+    "scene_cast": [
+      "alice"
+    ],
+    "worldbuilding_links": {
+      "home": [
+        "gate"
+      ],
+      "gate": [
+        "home"
+      ]
+    },
+    "sflog_records": [
+      {
+        "log_type": "character_location_change",
+        "params": {
+          "character_id": "alice",
+          "from": "home",
+          "to": "gate"
+        },
+        "raw": "<!-- SF_LOG character_location_change character_id=\"alice\" from=\"home\" to=\"gate\" -->",
+        "chapter_id": 15,
+        "char_position": 0
+      }
+    ]
+  },
+  {
+    "chapter_number": 16,
+    "text": "第16章：alice 缓缓走向门口，<!-- SF_LOG character_location_change character_id=\"alice\" from=\"home\" to=\"gate\" -->\n她推开木门，街上的晨光透进来。",
+    "scene_cast": [
+      "alice"
+    ],
+    "worldbuilding_links": {
+      "home": [
+        "gate"
+      ],
+      "gate": [
+        "home"
+      ]
+    },
+    "sflog_records": [
+      {
+        "log_type": "character_location_change",
+        "params": {
+          "character_id": "alice",
+          "from": "home",
+          "to": "gate"
+        },
+        "raw": "<!-- SF_LOG character_location_change character_id=\"alice\" from=\"home\" to=\"gate\" -->",
+        "chapter_id": 16,
+        "char_position": 0
+      }
+    ]
+  },
+  {
+    "chapter_number": 17,
+    "text": "第17章：alice 缓缓走向门口，<!-- SF_LOG character_location_change character_id=\"alice\" from=\"home\" to=\"gate\" -->\n她推开木门，街上的晨光透进来。",
+    "scene_cast": [
+      "alice"
+    ],
+    "worldbuilding_links": {
+      "home": [
+        "gate"
+      ],
+      "gate": [
+        "home"
+      ]
+    },
+    "sflog_records": [
+      {
+        "log_type": "character_location_change",
+        "params": {
+          "character_id": "alice",
+          "from": "home",
+          "to": "gate"
+        },
+        "raw": "<!-- SF_LOG character_location_change character_id=\"alice\" from=\"home\" to=\"gate\" -->",
+        "chapter_id": 17,
+        "char_position": 0
+      }
+    ]
+  },
+  {
+    "chapter_number": 18,
+    "text": "第18章：alice 缓缓走向门口，<!-- SF_LOG character_location_change character_id=\"alice\" from=\"home\" to=\"gate\" -->\n她推开木门，街上的晨光透进来。",
+    "scene_cast": [
+      "alice"
+    ],
+    "worldbuilding_links": {
+      "home": [
+        "gate"
+      ],
+      "gate": [
+        "home"
+      ]
+    },
+    "sflog_records": [
+      {
+        "log_type": "character_location_change",
+        "params": {
+          "character_id": "alice",
+          "from": "home",
+          "to": "gate"
+        },
+        "raw": "<!-- SF_LOG character_location_change character_id=\"alice\" from=\"home\" to=\"gate\" -->",
+        "chapter_id": 18,
+        "char_position": 0
+      }
+    ]
+  },
+  {
+    "chapter_number": 19,
+    "text": "第19章：alice 缓缓走向门口，<!-- SF_LOG character_location_change character_id=\"alice\" from=\"home\" to=\"gate\" -->\n她推开木门，街上的晨光透进来。",
+    "scene_cast": [
+      "alice"
+    ],
+    "worldbuilding_links": {
+      "home": [
+        "gate"
+      ],
+      "gate": [
+        "home"
+      ]
+    },
+    "sflog_records": [
+      {
+        "log_type": "character_location_change",
+        "params": {
+          "character_id": "alice",
+          "from": "home",
+          "to": "gate"
+        },
+        "raw": "<!-- SF_LOG character_location_change character_id=\"alice\" from=\"home\" to=\"gate\" -->",
+        "chapter_id": 19,
+        "char_position": 0
+      }
+    ]
+  },
+  {
+    "chapter_number": 20,
+    "text": "第20章：alice 缓缓走向门口，<!-- SF_LOG character_location_change character_id=\"alice\" from=\"home\" to=\"gate\" -->\n她推开木门，街上的晨光透进来。",
+    "scene_cast": [
+      "alice"
+    ],
+    "worldbuilding_links": {
+      "home": [
+        "gate"
+      ],
+      "gate": [
+        "home"
+      ]
+    },
+    "sflog_records": [
+      {
+        "log_type": "character_location_change",
+        "params": {
+          "character_id": "alice",
+          "from": "home",
+          "to": "gate"
+        },
+        "raw": "<!-- SF_LOG character_location_change character_id=\"alice\" from=\"home\" to=\"gate\" -->",
+        "chapter_id": 20,
+        "char_position": 0
+      }
+    ]
+  }
+]
