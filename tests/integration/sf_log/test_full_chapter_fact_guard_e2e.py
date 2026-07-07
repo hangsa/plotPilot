@@ -24,6 +24,18 @@ def _make_record() -> SFLogRecord:
     )
 
 
+class _StubLLMProvider:
+    """Phase 2B Task 8 fixture: minimal LLM provider stub.
+
+    Empty-string response is treated by the prose_invoker as
+    `rollback_signal=True`, which mirrors the Phase 2A stub semantics
+    (force-pass at attempt 3). Clean tests pass at attempt 1 without
+    ever calling the provider.
+    """
+    def generate(self, prompt_snapshot):  # noqa: ANN001
+        return ""
+
+
 def test_full_chapter_run_catches_forbidden_verb_and_force_passes():
     """Chapter text with '瞬移' triggers character_location.no_instant_teleport →
     HARD hit → CPMS unavailable → force-pass at attempt 3.
@@ -34,6 +46,8 @@ def test_full_chapter_run_catches_forbidden_verb_and_force_passes():
     pipeline = BaseStoryPipeline()
     ctx = PipelineContext(novel_id="n-e2e", chapter_number=1, target_word_count=2000)
     ctx.chapter_content = "alice 瞬移到了门口"  # corrected fixture
+    # Phase 2B: wire a stub LLM provider so the pipeline can run.
+    ctx.llm_provider = _StubLLMProvider()
     rec = _make_record()
 
     delegate = MagicMock(spec=StoryOSDelegate)
@@ -80,6 +94,9 @@ def test_full_chapter_run_clean_chapter_passes_first_attempt():
     pipeline = BaseStoryPipeline()
     ctx = PipelineContext(novel_id="n-clean", chapter_number=1, target_word_count=2000)
     ctx.chapter_content = "alice walked to the door normally."  # English, no forbidden verbs
+    # Phase 2B: wire a stub LLM provider (clean path doesn't call it, but
+    # the resolver still needs one to avoid NotImplementedError).
+    ctx.llm_provider = _StubLLMProvider()
     rec = _make_record()
 
     delegate = MagicMock(spec=StoryOSDelegate)

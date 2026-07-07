@@ -1,5 +1,6 @@
 """Chapter API 路由"""
 import logging
+import sqlite3
 from typing import Any, Dict, List, Literal, Optional
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Path
@@ -605,3 +606,72 @@ async def get_chapter_warnings(
         "chapter_id": str(chapter.id),
         "warnings": chapter.warnings or [],
     }
+
+
+class FactGuardLogDTO(BaseModel):
+    """Audit row for one fact_guard attempt."""
+    id: int
+    chapter_id: int
+    chapter_number: int
+    novel_id: str
+    attempt: int
+    mode: str
+    action: str
+    hard_before: int
+    hard_after: int
+    rule_id: Optional[str] = None
+    severity: Optional[str] = None
+    diff_excerpt: Optional[str] = None
+    notes: Optional[str] = None
+    created_at: str
+
+    @classmethod
+    def from_row(cls, row: dict) -> "FactGuardLogDTO":
+        return cls(**row)
+
+
+@router.get(
+    "/{novel_id}/chapters/{chapter_number}/fact-guard-history",
+    response_model=List[FactGuardLogDTO],
+)
+async def get_chapter_fact_guard_history(
+    novel_id: str,
+    chapter_number: int,
+):
+    """Audit trail of every fact_guard attempt (sflog x 2 + prose x 1).
+
+    Each row exposes the LLM's action and the hard-hit count delta so
+    writers can review what the gate did to their chapter.
+
+    Returns 404 if the chapter doesn't exist. The actual audit rows are
+    read directly from the storyos_fact_guard_logs table via
+    FactGuardAuditRepository.
+    """
+    from infrastructure.persistence.sqlite.storyos_fact_guard_logs_repository import (
+        FactGuardAuditRepository,
+    )
+
+    chapter_id = _resolve_chapter_id(novel_id, chapter_number)
+    if chapter_id is None:
+        raise HTTPException(status_code=404, detail="chapter not found")
+    repo = FactGuardAuditRepository(get_db_path())
+    page = repo.list_for_chapter(chapter_id, limit=50)
+    return [FactGuardLogDTO.from_row(r) for r in page.rows]
+
+
+def _resolve_chapter_id(novel_id: str, chapter_number: int) -> Optional[int]:
+    """Return the SQLite rowid of `chapters` matching (novel_id, chapter_number).
+
+    None if no such chapter exists. Synchronous DB read; no caching (Phase 2B
+    scope — caching deferred to 2C per Q3).
+
+    Note: ``chapters.id`` is TEXT (a chapter slug like
+    ``chapter-novel-X-chapter-N``), so we project the implicit rowid instead.
+    """
+    with sqlite3.connect(get_db_path()) as conn:
+        cur = conn.execute(
+            "SELECT rowid FROM chapters WHERE novel_id = ? AND number = ? LIMIT 1",
+            (novel_id, chapter_number),
+        )
+        row = cur.fetchone()
+        return row[0] if row else None

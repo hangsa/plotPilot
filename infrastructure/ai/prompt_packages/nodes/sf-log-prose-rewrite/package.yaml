@@ -1,0 +1,19 @@
+name: SF_LOG prose alignment rewrite
+category: rewrite
+source: application/sf_log/fact_guard_service.py::FactGuardService::_prose_attempt
+description: 'Paragraph-level prose rewrite to align chapter text with SF_LOG records; broader scope than sf-log-rewrite-with-hints'
+builtin: true
+tags:
+- sf_log
+- rewrite
+- prose
+- fact_guard
+- phase_2b
+output_format: text
+variables:
+- { name: chapter_text, type: string, required: true, desc: '章节正文（含 SF_LOG 注释）' }
+- { name: hits, type: string, required: true, desc: 'fact_guard HARD 命中列表' }
+- { name: sflog_records, type: string, required: true, desc: '当前 SF_LOG 记录 JSON' }
+- { name: attempt, type: integer, required: true, desc: 'attempt 编号（Phase 2B 中固定为 3）' }
+id: sf-log-prose-rewrite
+sort_order: 116

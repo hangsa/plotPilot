@@ -30,7 +30,7 @@ from domain.storyos.value_objects.sf_log import SFLogRecord
 @dataclass
 class EngineRule:
     id: str
-    applies_to: SFLogType
+    applies_to: Optional[SFLogType]  # None = wildcard (Phase 2B Task 5)
     severity: Severity
     description: str
     pattern: Optional[str] = None
@@ -87,7 +87,10 @@ class RegexEngine:
         hits: List[GuardHit] = []
         window = self._text_window(record, chapter_text)
         for rule in self.rules.values():
-            if rule.applies_to is not record.log_type:
+            # applies_to=None means wildcard — applies to every record log type
+            # (Phase 2B Task 5: lets tests build cross-cutting rules without
+            # binding to a specific SFLogType).
+            if rule.applies_to is not None and rule.applies_to is not record.log_type:
                 continue
             # Single regex
             if rule.pattern is not None:
@@ -176,7 +179,10 @@ class RegexEngine:
 
     def _text_window(self, record: SFLogRecord, chapter_text: str) -> str:
         """Slice chapter_text to ±text_window_chars around record.char_position."""
-        applicable_rules = [r for r in self.rules.values() if r.applies_to is record.log_type]
+        applicable_rules = [
+            r for r in self.rules.values()
+            if r.applies_to is None or r.applies_to is record.log_type
+        ]
         if not applicable_rules:
             return chapter_text
         window_size = max(r.text_window_chars for r in applicable_rules)

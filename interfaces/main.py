@@ -230,6 +230,18 @@ def create_app(app_settings: Optional[BackendSettings] = None) -> FastAPI:
     created.include_router(build_storyos_router())
     register_error_handlers(created)
 
+    # ── PHASE 2B Task 8 ── register fact_guard audit repo on app state
+    # Engine code reads ``self._app_state.fact_guard_audit_repo`` from
+    # ``engine.pipeline.base._hook_step5_post_write_gate``. FastAPI exposes
+    # ``app.state`` as the per-app DI container, so we mirror the spec
+    # pattern by attaching the singleton here. Missing repo (test/dev) is
+    # handled inside the pipeline via NOOP_AUDIT_REPO.
+    from application.paths import get_db_path
+    from infrastructure.persistence.sqlite.storyos_fact_guard_logs_repository import (
+        FactGuardAuditRepository,
+    )
+    created.state.fact_guard_audit_repo = FactGuardAuditRepository(get_db_path())
+
     @created.middleware("http")
     async def fix_redirect_host(request, call_next):
         response = await call_next(request)
