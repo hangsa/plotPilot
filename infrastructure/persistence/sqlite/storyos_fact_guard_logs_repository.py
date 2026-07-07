@@ -2,7 +2,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Iterable, List, Optional
+from typing import TYPE_CHECKING, List, Optional
+
+if TYPE_CHECKING:
+    from application.sf_log.fact_guard_service import FactGuardAction, FactGuardMode
 
 
 @dataclass(frozen=True)
@@ -11,8 +14,8 @@ class FactGuardLogRow:
     chapter_number: int
     novel_id: str
     attempt: int
-    mode: str                          # 'sflog' | 'prose'
-    action: str
+    mode: "FactGuardMode"
+    action: "FactGuardAction"
     hard_before: int = 0
     hard_after: int = 0
     rule_id: Optional[str] = None

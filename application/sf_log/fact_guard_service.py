@@ -15,20 +15,16 @@ Python 3.9 compat: `from __future__ import annotations` defers `Optional[list]` 
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Callable, List, Optional
+from typing import Callable, List, Literal, Optional
 
 from application.sf_log.bible_snapshot import ChapterBibleContext
 from application.sf_log.regex_engine import RegexEngine
 from domain.sf_log.guard_report import GuardReport, GuardHit, Severity
 from domain.storyos.value_objects.sf_log import SFLogRecord
 
-if TYPE_CHECKING:
-    from infrastructure.persistence.sqlite.storyos_fact_guard_logs_repository import (
-        FactGuardAuditRepository,
-    )
-
 
 # CPMS invoker signature; injected from pipeline hook (Task 8)
+# Deprecated: replaced by SFLogRewriteFn + ProseRewriteFn in Phase 2B Task 5.
 CPMSInvoker = Callable[[List[SFLogRecord], List[GuardHit], int], Optional[List[SFLogRecord]]]
 
 
@@ -76,6 +72,22 @@ class FactGuardService:
 
 # ── Phase 2B: prose rewrite value objects + callable type aliases ──
 
+# Action enum (mirrors SQL CHECK constraint — see plan §5 / migration):
+#   passed | rewritten_sflog | no_rewrite_sflog | rewritten_prose |
+#   forced_pass_rollback_llm | rolled_back_regression |
+#   provider_failed | node_missing
+FactGuardAction = Literal[
+    "passed",
+    "rewritten_sflog",
+    "no_rewrite_sflog",
+    "rewritten_prose",
+    "forced_pass_rollback_llm",
+    "rolled_back_regression",
+    "provider_failed",
+    "node_missing",
+]
+FactGuardMode = Literal["sflog", "prose"]
+
 
 @dataclass(frozen=True)
 class SFLogRewriteResult:
@@ -83,7 +95,6 @@ class SFLogRewriteResult:
     SF_LOG comment block; chapter text is unchanged.
     """
     records: List[SFLogRecord]
-    mode: str = "sflog"                           # for symmetry; only "sflog" today
 
 
 @dataclass(frozen=True)
