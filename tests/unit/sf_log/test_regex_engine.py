@@ -302,6 +302,37 @@ def test_evaluate_chapter_dispatches_to_python_callable_rules(full_engine):
     assert any(h.rule_id == "knowledge_gain.no_omniscience" for h in hits)
 
 
+def test_evaluate_chapter_dispatches_location_continuity_multi_record(full_engine):
+    """evaluate_chapter routes the multi-record location_continuity callable.
+
+    Two CHARACTER_LOCATION_CHANGE records for the same character landing in
+    disconnected `to` locations must surface at least one HARD hit under rule
+    `character_location.continuity`. Uses a sparse (non-empty) link graph so
+    the 2-hop BFS actually runs and fails to find a path.
+    """
+    bible = ChapterBibleContext(
+        chapter_id=1,
+        scene_cast_ids=frozenset(),
+        characters=(),
+        # loc_c is unreachable from loc_a within 2 hops
+        worldbuilding_links={"loc_a": ["loc_b"], "loc_b": ["loc_a"]},
+    )
+    rec1 = _record(
+        SFLogType.CHARACTER_LOCATION_CHANGE,
+        {"character_id": "x", "from": "loc_a", "to": "loc_a"},
+    )
+    rec2 = _record(
+        SFLogType.CHARACTER_LOCATION_CHANGE,
+        {"character_id": "x", "from": "loc_a", "to": "loc_c"},
+    )
+    hits = full_engine.evaluate_chapter(
+        [rec1, rec2], "any text", bible_snapshot=bible
+    )
+    continuity_hits = [h for h in hits if h.rule_id == "character_location.continuity"]
+    assert len(continuity_hits) >= 1
+    assert continuity_hits[0].severity is Severity.HARD
+
+
 def test_evaluate_chapter_runs_pattern_rules(full_engine):
     record = _record(
         SFLogType.CHARACTER_LOCATION_CHANGE,

@@ -113,6 +113,10 @@ class RegexEngine:
             if rule.python_callable is not None:
                 if bible_snapshot is None:
                     continue
+                # Multi-record callables (e.g. location_continuity) are dispatched
+                # at chapter level — skip them here to avoid signature mismatch.
+                if rule.python_callable.endswith("location_continuity.evaluate"):
+                    continue
                 callable_fn = resolve_callable(rule.python_callable)
                 if callable_fn is None:
                     continue

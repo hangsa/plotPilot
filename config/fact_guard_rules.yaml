@@ -58,9 +58,10 @@ rules:
   - id: conflict_escalate.no_repeat
     applies_to: conflict_escalate
     severity: soft
-    description: "同 conflict_id 在单章 escalate > 1 次"
-    pattern: "^.{0,200}$"
-    # Phase 2A simplification: full check needs cross-record state; param-based check deferred
+    description: "同 conflict_id 在单章 escalate > 1 次（Phase 2A: 仅校验 conflict_id 存在性）"
+    python_callable: "application.sf_log.callables.conflict_escalate_repeat.evaluate"
+    # Phase 2A simplification: structural proxy — HARD hit if conflict_id missing/empty
+    # (cannot check repeat without an identity). Real repeat-check deferred to 2B.
 
   # 8. MYSTERY_CLUE — mystery_id must be well-formed (Phase 2A simplification; window pushed to 2B)
   - id: mystery_clue.no_premature_reveal
@@ -89,9 +90,10 @@ rules:
   - id: goal_milestone.no_skip
     applies_to: goal_milestone
     severity: hard
-    description: "相邻 milestone 至少相隔 1 章"
-    pattern: "^.{1,100}$"  # placeholder; cross-record check deferred
-    text_window_chars: 0
+    description: "相邻 milestone 至少相隔 1 章（Phase 2A: 仅校验 goal_id 存在性）"
+    python_callable: "application.sf_log.callables.goal_milestone_skip.evaluate"
+    # Phase 2A simplification: structural proxy — HARD hit if goal_id missing/empty
+    # (cannot check chapter gap without an identity). Real cross-chapter check deferred to 2B.
 
   # 12. REGISTRY_CREATE — (s, p, o) triple must be unique (T0 structural check)
   - id: registry_create.uniqueness
