@@ -34,6 +34,8 @@ out/
 frontend/node_modules/
 frontend/.vite/
 frontend/dist/
+# 顶层 node_modules（任何工具意外生成的 npm/pnpm/yarn 残留）
+node_modules/
 
 # ── 本地 Agent / MCP 缓存 ──
 .playwright-mcp/
