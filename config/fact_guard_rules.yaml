@@ -60,7 +60,7 @@ rules:
     severity: soft
     description: "同 conflict_id 在单章 escalate > 1 次（Phase 2A: 仅校验 conflict_id 存在性）"
     python_callable: "application.sf_log.callables.conflict_escalate_repeat.evaluate"
-    # Phase 2A simplification: structural proxy — HARD hit if conflict_id missing/empty
+    # Phase 2A simplification: structural proxy — SOFT hit if conflict_id missing/empty
     # (cannot check repeat without an identity). Real repeat-check deferred to 2B.
 
   # 8. MYSTERY_CLUE — mystery_id must be well-formed (Phase 2A simplification; window pushed to 2B)
