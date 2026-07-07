@@ -488,33 +488,28 @@ class FactGuardAuditRepository:
         self._db = DatabaseConnection(db_path)
 
     def append(self, row: FactGuardLogRow) -> int:
+        # Routes through WriteDispatch per D1 (§8 Resolved decisions). The
+        # actual implementation is in this file too; see D1 below for the
+        # full pattern. Direct-DB access is reserved for read queries below.
         try:
-            with self._db.connection() as conn:
-                cur = conn.execute(
-                    """
-                    INSERT INTO storyos_fact_guard_logs
-                      (chapter_id, chapter_number, novel_id, attempt, mode,
-                       action, hard_before, hard_after,
-                       rule_id, severity, diff_excerpt, notes)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    """,
-                    (
-                        row.chapter_id,
-                        row.chapter_number,
-                        row.novel_id,
-                        row.attempt,
-                        row.mode,
-                        row.action,
-                        row.hard_before,
-                        row.hard_after,
-                        row.rule_id,
-                        row.severity,
-                        row.diff_excerpt,
-                        row.notes,
-                    ),
-                )
-                conn.commit()
-                return cur.lastrowid or 0
+            ok = enqueue_execute_sql(
+                _INSERT_SQL,
+                (
+                    row.chapter_id,
+                    row.chapter_number,
+                    row.novel_id,
+                    row.attempt,
+                    row.mode,
+                    row.action,
+                    row.hard_before,
+                    row.hard_after,
+                    row.rule_id,
+                    row.severity,
+                    row.diff_excerpt,
+                    row.notes,
+                ),
+            )
+            return -1 if ok else 0
         except Exception:                       # noqa: BLE001
             return 0
 
@@ -730,56 +725,47 @@ Mirroring Phase 2A's `scripts/check_phase_2a_metrics.py`, a `scripts/check_phase
 
 **D1. Audit writes route through `WriteDispatch`.** `CLAUDE.md` mandates "All SQLite writes go through a single-writer dispatcher (`Write Dispatch`)". Although fact_guard audit is append-only and low-frequency, the rule is a hard project convention.
 
-**Implementation:**
+**Implementation:** A single-row INSERT goes through `enqueue_execute_sql(sql, params)` from `infrastructure.persistence.database.write_dispatch`. The dispatcher queues the SQL on the writer thread; the API thread returns immediately. We do **not** await the rowid — audit accepts "no synchronous rowid" semantics because rows are not referenced by ID from any hot path.
 
 ```python
 # in infrastructure/persistence/sqlite/storyos_fact_guard_logs_repository.py
 
-from infrastructure.persistence.database.write_dispatch import WriteDispatch
+from infrastructure.persistence.database.write_dispatch import enqueue_execute_sql
+
+_INSERT_SQL = """
+INSERT INTO storyos_fact_guard_logs
+  (chapter_id, chapter_number, novel_id, attempt, mode,
+   action, hard_before, hard_after,
+   rule_id, severity, diff_excerpt, notes)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+"""
 
 class FactGuardAuditRepository:
     def __init__(self, db_path: str) -> None:
         self._db_path = db_path
 
     def append(self, row: FactGuardLogRow) -> int:
-        """Queues the INSERT into WriteDispatch; returns 0 immediately.
-        Read the actual rowid by querying the dispatcher after a small
-        settle window, or accept "no rowid returned" semantics for audit.
+        """Queue the INSERT into WriteDispatch; returns 0 (audit doesn't need
+        rowid since no consumer reads by primary key).
 
-        Audit writes are not on the critical path; failure here is silent
-        (no-op equivalent to direct-DB exception swallowing).
+        Audit failures must not crash the pipeline (CLAUDE.md rule + R5).
         """
         try:
-            return WriteDispatch.enqueue_txn_batch(
-                self._db_path,
-                self._insert_callable,
-                (row,),
-            ) or 0
+            ok = enqueue_execute_sql(
+                _INSERT_SQL,
+                (
+                    row.chapter_id, row.chapter_number, row.novel_id,
+                    row.attempt, row.mode, row.action,
+                    row.hard_before, row.hard_after,
+                    row.rule_id, row.severity, row.diff_excerpt, row.notes,
+                ),
+            )
+            return 0 if not ok else -1          # -1 signals "queued"; 0 signals "failed"
         except Exception:                       # noqa: BLE001
             return 0
-
-    @staticmethod
-    def _insert_callable(conn, row: FactGuardLogRow) -> int:
-        """Runs on the dispatcher thread with a TxnCollectingConnection."""
-        cur = conn.execute(
-            """
-            INSERT INTO storyos_fact_guard_logs
-              (chapter_id, chapter_number, novel_id, attempt, mode,
-               action, hard_before, hard_after,
-               rule_id, severity, diff_excerpt, notes)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                row.chapter_id, row.chapter_number, row.novel_id,
-                row.attempt, row.mode, row.action,
-                row.hard_before, row.hard_after,
-                row.rule_id, row.severity, row.diff_excerpt, row.notes,
-            ),
-        )
-        return cur.lastrowid or 0
 ```
 
-`enqueue_txn_batch` returns the lastrowid when the batch flushes; this is non-deterministic from the caller's perspective because the dispatcher batches writes. For audit we accept "0 means queued or failed" — `list_for_chapter` reads what's actually persisted.
+`enqueue_execute_sql` returns a `bool` from the persistence queue's `push()`. We translate that into `-1` (queued) vs `0` (rejected by the queue); callers should treat both as "audit attempted" rather than differentiating the two. Read queries on `storyos_fact_guard_logs` use a regular `sqlite3.Connection` read path — WriteDispatch is write-only.
 
 Reads (the `GET /chapters/{id}/fact-guard-history` endpoint) use a regular `sqlite3.Connection` read; WriteDispatch is write-only.
 
