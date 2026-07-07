@@ -217,6 +217,24 @@ PlotPilot contains multiple specialized engines, each with a distinct role in th
 详见 `docs/superpowers/specs/2026-07-07-phase-2a-fact-guard-design.md`
 实施计划见 `docs/superpowers/plans/2026-07-07-phase-2a-fact-guard.md`
 
+### Phase 2B — Tier 0 SF_LOG Prose Rewrite (v1.4)
+
+项目 v1.3 之后引入 Tier 0 prose 改写层：
+- 3-attempt loop：sflog × 2（已有节点 sf-log-rewrite-with-hints）+ prose × 1（新节点 sf-log-prose-rewrite）+ force_pass
+- 自动升级：3 次 SF_LOG-only 仍 HARD → attempt 3 prose
+- 段落级重写：prose 模式可改含 `matched_text` 的句子 + 同段落上下文延续
+- 单 prose attempt + regression guard：`new_hard < old_hard` 才能落地，否则回滚原文
+- 新 CPMS 节点 `sf-log-prose-rewrite`（package.yaml sort_order=116）
+- 新增值对象：`ProseRewriteResult`, `SFLogRewriteResult`, `FactGuardLogRow`, `FactGuardAction`, `FactGuardMode`
+- 新 SQLite 表 `storyos_fact_guard_logs`（8 种 action enum，写入走 WriteDispatch per D1；读取走直连）
+- 新 endpoint `GET /api/v1/novels/{novel_id}/chapters/{chapter_number}/fact-guard-history`
+- 新 helper `_resolve_chapter_id(novel_id, chapter_number)`（API 层）+ `_resolve_chapter_rowid(ctx)`（pipeline 层）
+- `fact_guard_cpms.py`：CPMS 接线工厂 + `NOOP_AUDIT_REPO` 回退
+- 验收门禁：`scripts/check_phase_2b_metrics.py`
+
+详见 `docs/superpowers/specs/2026-07-07-phase-2b-prose-rewrite-design.md`
+实施计划见 `docs/superpowers/plans/2026-07-07-phase-2b-prose-rewrite.md`
+
 ## Environment Variables
 
 Copy `.env.example` to `.env` and configure at minimum one LLM key (`ANTHROPIC_API_KEY` or `ARK_API_KEY`). Key vars: `EMBEDDING_SERVICE` (openai/local), `VECTOR_STORE_TYPE` (chromadb), `LOG_LEVEL`, `LOG_FILE`, `CORS_ORIGINS`, `DISABLE_AUTO_DAEMON`.
