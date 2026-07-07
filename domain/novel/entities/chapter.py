@@ -31,6 +31,7 @@ class Chapter(BaseEntity):
         emotional_tension: float = 50.0,
         pacing_tension: float = 50.0,
         generation_hint: str = "",
+        warnings: list = None,  # PHASE 2A: fact_guard output
     ):
         super().__init__(id)
         self.novel_id = novel_id
@@ -44,6 +45,7 @@ class Chapter(BaseEntity):
         self.emotional_tension = emotional_tension  # 情绪张力 0-100
         self.pacing_tension = pacing_tension  # 节奏张力 0-100
         self.generation_hint = generation_hint  # 用户手写的本章生成约束（直注 AI 上下文）
+        self.warnings = warnings if warnings is not None else []  # PHASE 2A: fact_guard 命中列表
 
     @property
     def content(self) -> str:
@@ -79,4 +81,15 @@ class Chapter(BaseEntity):
         self.emotional_tension = dimensions.emotional_tension
         self.pacing_tension = dimensions.pacing_tension
         self.tension_score = dimensions.composite_score
+        self.updated_at = datetime.now(timezone.utc)
+
+    def set_warnings(self, warnings: list) -> None:
+        """Set fact_guard hits as chapter warnings (Phase 2A).
+
+        Args:
+            warnings: list of dict, each with keys
+                rule_id (str), sflog_id (str), severity (str: hard|soft),
+                message (str), matched_text (str, optional).
+        """
+        self.warnings = list(warnings)
         self.updated_at = datetime.now(timezone.utc)
