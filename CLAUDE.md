@@ -186,19 +186,23 @@ PlotPilot contains multiple specialized engines, each with a distinct role in th
 - **Engines vs. application services**: The "Engines" in the table above (Evolution, Governance, Memory, Codex, Snapshot) each have their own `application/<name>/` package with a clear public service; treat them as bounded contexts and avoid cross-importing internals.
 - **Frontend** uses `@/` alias for `frontend/src/`; chunk splitting: naive-ui, echarts, vue-runtime, vendor. Vue 3 + TypeScript + Vite + Pinia + Vue Router + Vue Flow (DAG viz) + ECharts. Tauri 2.x for desktop builds.
 
-### StoryOS 工作台
+### StoryOS 工作台（v1.2）
 
 项目接入 StoryForge2 tier_0 机制后，工作台新增 "叙事资产" 入口：
 - 路径：`/book/:slug/storyos`
-- 8 Registry（冲突/谜题/反转/承诺/揭示/预期/目标/伏笔）CRUD
+- 8 Registry（冲突/谜题/反转/承诺/揭示/预期/目标/伏笔）CRUD — 40 个端点
 - CascadeGraph 可视化
 - SFLogInspector 章节 SF_LOG 注释解析
-- PredeclaredDiff 预声明 vs 实际产出对比
+- PredeclaredDiff 预声明 vs 实际产出三色高亮
+- Migration 工具（旧 `foreshadowings` 表 → `storyos_foreshadowing_v1`，断点续跑 + 审计 + 回滚）
 
-1D 里程碑为「前端 + API」；cascade simulate/replay 与 migration 端点为桩实现（501），真实逻辑在 1E 接入。
+**当前里程碑状态**（2026-07-07 验收）：
+- 1A-1E 全部合并。1E migration 端点已从 501 桩升级为真实 handler（200/404）。
+- cascade simulate / replay 仍为 501（设计：1F 真实联级联接；当前通过 SFLogInspector 替代路径）。
+- Python 3.9 兼容：8 个 PEP 604 + dataclass kw_only + async_bridge timeout 异常归一化已修。
 
 详细设计见 `docs/superpowers/specs/2026-07-02-storyos-integration-design.md`
-实施计划见 `docs/superpowers/plans/2026-07-02-storyos-phase-1d-frontend-api.md`
+实施计划见 `docs/superpowers/plans/2026-07-02-storyos-phase-1d-frontend-api.md` 与 `2026-07-02-storyos-phase-1e-migration.md`
 验收清单见 `docs/superpowers/checklists/2026-07-02-storyos-1d-acceptance.md`
 
 ## Environment Variables

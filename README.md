@@ -138,7 +138,8 @@ PlotPilot 内核（本仓库）
         ├── 向量语义检索层
         ├── 剧情引擎运行时
         ├── 提示词策略层（20+ 接点）
-        └── 质量监控子系统
+        ├── 质量监控子系统
+        └── StoryOS 工作台（8 Registry · SF_LOG · 迁移治理）
                 │
                 ▼
         REST API（FastAPI · v1 · 版本化）
@@ -154,6 +155,18 @@ PlotPilot 内核（本仓库）
 ```
 
 内核提供稳定的 REST API 边界；所有生态扩展均通过提示词包、工作流插件或上层应用的方式叠加能力，内核本身不感知。如果你在用内核做二创，建议从提示词包和工作流层开始，而非修改内核代码。
+
+### StoryOS 工作台（v1.2）
+
+工作台新增"叙事资产"入口 `/book/:slug/storyos`，把章节生成过程中的结构化事件显式化：
+
+- **8 Registry**：冲突 / 谜题 / 反转 / 承诺 / 揭示 / 预期 / 目标 / 伏笔 — 跨章 CRUD + 状态机
+- **SF_LOG**：LLM 通过 HTML 注释声明结构化事件（`<!-- SF_LOG character_state_change ... -->`），解析后落到 8 Registry；零 LLM 正则解析
+- **CascadeGraph**：跨表级联影响可视化
+- **SFLogInspector**：章节 SF_LOG 注释解析 + 与预声明对比
+- **PredeclaredDiff**：预声明 vs 实际产出三色高亮
+
+设计见 `docs/superpowers/specs/2026-07-02-storyos-integration-design.md`；实施计划见 `docs/superpowers/plans/2026-07-02-storyos-phase-1d-frontend-api.md`；1D 验收见 `docs/superpowers/checklists/2026-07-02-storyos-1d-acceptance.md`。
 
 ---
 
