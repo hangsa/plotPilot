@@ -1,0 +1,6 @@
+# Phase 2A stub — full 12 rules in Task 5
+version: 2a-1
+defaults:
+  severity_on_miss: hard
+  text_window_chars: 200
+rules: []
