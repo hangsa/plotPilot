@@ -27,10 +27,27 @@ def _make_record() -> SFLogRecord:
     )
 
 
+class _StubLLMProvider:
+    """Phase 2B Task 8 fixture: minimal LLM provider stub.
+
+    Returns an empty string — the prose_invoker in fact_guard_cpms treats
+    empty responses as `rollback_signal=True`, which mirrors the Phase 2A
+    stub semantics (force-pass on attempt 3). Tests that don't hit HARD
+    rules (clean chapter) pass on attempt 1 without ever calling the
+    provider.
+    """
+    def generate(self, prompt_snapshot):  # noqa: ANN001
+        return ""
+
+
 @pytest.fixture
 def pipeline_and_ctx():
     pipeline = BaseStoryPipeline()
     ctx = PipelineContext(novel_id="n-1", chapter_number=1)
+    # Phase 2B: wire a stub LLM provider on ctx so the pipeline can run
+    # the 3-attempt loop (otherwise NotImplementedError from
+    # _resolve_fact_guard_provider).
+    ctx.llm_provider = _StubLLMProvider()
     rec = _make_record()
     delegate = MagicMock(spec=StoryOSDelegate)
     parser = MagicMock()

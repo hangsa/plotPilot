@@ -17,6 +17,7 @@
 from __future__ import annotations
 
 import logging
+import sqlite3
 import time
 from abc import ABC
 from typing import Any, Dict, List, Optional
@@ -30,6 +31,61 @@ logger = logging.getLogger(__name__)
 
 # ── PHASE 2A ── fact_guard engine cache (loaded lazily once per process)
 _FACT_GUARD_ENGINE = None
+
+# ── PHASE 2B ── fact_guard runtime accessors ───────────────────────────────
+# Sentinel app_state; replaced when the host wires one via _app_state injection.
+_DEFAULT_APP_STATE = type("_EmptyAppState", (), {})()
+
+
+def _resolve_fact_guard_provider(ctx, app_state):
+    """Resolve the LLM provider for fact_guard.
+
+    Prefers ``ctx.llm_provider`` (most local), then ``app_state.llm_provider``
+    (cross-pipeline injection). Raises NotImplementedError if neither is
+    wired so misconfiguration fails fast rather than silently no-op'ing.
+    """
+    provider = getattr(ctx, "llm_provider", None)
+    if provider is not None:
+        return provider
+    provider = getattr(app_state, "llm_provider", None)
+    if provider is not None:
+        return provider
+    raise NotImplementedError(
+        "fact_guard requires an LLM provider; "
+        "wire one on ctx or app_state"
+    )
+
+
+def _resolve_cpms_assembler(app_state):
+    """Resolve the CPMS prompt assembler, lazy-defaulting to CPMSPromptAssembler()."""
+    assembler = getattr(app_state, "cpms_assembler", None)
+    if assembler is not None:
+        return assembler
+    from application.ai_invocation.prompt_assembler import CPMSPromptAssembler
+    return CPMSPromptAssembler()
+
+
+def _resolve_chapter_rowid(ctx) -> int:
+    """Find the SQLite rowid of the chapter; 0 if not yet saved.
+
+    For Phase 2B we accept 0 — audit rows use chapter_id=0 for pre-save
+    evaluations. Step 6 saves the chapter immediately after this hook, but
+    the audit-row insert is fire-and-forget via WriteDispatch so the FK
+    (if any) is not a blocker.
+    """
+    try:
+        from application.paths import get_db_path
+        novel_id = getattr(ctx, "novel_id", "")
+        chapter_number = int(getattr(ctx, "chapter_number", 0) or 0)
+        with sqlite3.connect(get_db_path()) as conn:
+            cur = conn.execute(
+                "SELECT rowid FROM chapters WHERE novel_id = ? AND number = ? LIMIT 1",
+                (novel_id, chapter_number),
+            )
+            row = cur.fetchone()
+            return row[0] if row else 0
+    except Exception:
+        return 0
 
 def _writing_progress(
     ctx: PipelineContext,
@@ -1382,12 +1438,17 @@ class BaseStoryPipeline(ABC):
                 )
                 return {"format_errors": format_errors, "records": records}
             match_report = delegate.parser_service.match_against_predeclared(records, predeclared)
-            # ── PHASE 2A 追加：fact_guard evaluation (12 rules, 3-attempt + force-pass) ──
+            # ── PHASE 2A/2B: fact_guard evaluation (3-attempt loop w/ prose rewrite) ──
             fact_guard_report = None
+            rewritten_text: Optional[str] = None
             try:
                 from application.sf_log.fact_guard_service import FactGuardService
                 from application.sf_log.regex_engine import RegexEngine
                 from application.sf_log.bible_snapshot import ChapterBibleContext
+                from application.sf_log.fact_guard_cpms import (
+                    build_writing_pipeline_invokers,
+                    NOOP_AUDIT_REPO,
+                )
 
                 # Phase 2A: lazy module-level cache so we don't re-parse YAML per chapter
                 global _FACT_GUARD_ENGINE
@@ -1395,30 +1456,26 @@ class BaseStoryPipeline(ABC):
                     _FACT_GUARD_ENGINE = RegexEngine.from_yaml("config/fact_guard_rules.yaml")
                 engine = _FACT_GUARD_ENGINE
 
-                def _sflog_invoker(records, hits, attempt):  # noqa: ANN001
-                    # Phase 2B Task 5: real wiring is in writing_orchestrator
-                    # integration (Task 8). Stub returns None → service treats
-                    # as rewrite-unavailable → continues to attempt 2 + prose.
-                    return None
+                # ── Resolve runtime services (graceful defaults) ──
+                app_state_local = getattr(self, "_app_state", None) or _DEFAULT_APP_STATE
+                audit_repo = getattr(
+                    app_state_local, "fact_guard_audit_repo", NOOP_AUDIT_REPO,
+                )
+                provider = _resolve_fact_guard_provider(ctx, app_state_local)
+                assembler = _resolve_cpms_assembler(app_state_local)
+                max_text_cap = getattr(
+                    app_state_local, "fact_guard_text_cap_chars", 6000,
+                )
 
-                def _prose_invoker(text, records, hits, attempt):  # noqa: ANN001
-                    # Phase 2B Task 5: stub returns rollback_signal=True so
-                    # attempt 3 produces forced_pass without rewriting text.
-                    from application.sf_log.fact_guard_service import (
-                        ProseRewriteResult,
-                    )
-                    return ProseRewriteResult(
-                        new_chapter_text=text,
-                        new_records=records,
-                        rollback_signal=True,
-                    )
+                invokers = build_writing_pipeline_invokers(
+                    assembler=assembler,
+                    llm_provider=provider,
+                    parser_service=delegate.parser_service,
+                    audit_repo=audit_repo,
+                    max_chapter_text_chars=max_text_cap,
+                )
 
-                def _parse_prose(text, chapter_number):  # noqa: ANN001
-                    # Phase 2B Task 5: real wiring in Task 8. Stub returns
-                    # empty record list — prose is never re-parsed under the
-                    # rollback_signal=True path above.
-                    return []
-
+                # ── Bible snapshot ──
                 bible_snapshot = getattr(ctx, "chapter_bible_snapshot", None)
                 if bible_snapshot is None:
                     # Construct minimal from ctx.scene_plan.cast if available
@@ -1434,16 +1491,18 @@ class BaseStoryPipeline(ABC):
 
                 svc = FactGuardService(
                     engine=engine,
-                    sflog_invoker=_sflog_invoker,
-                    prose_invoker=_prose_invoker,
-                    parse_prose=_parse_prose,
+                    sflog_invoker=invokers.sflog_invoker,
+                    prose_invoker=invokers.prose_invoker,
+                    parse_prose=invokers.parse_prose,
+                    audit_repo=audit_repo,
                 )
-                fact_guard_report, _rewritten_text = svc.evaluate(
+                chapter_id = _resolve_chapter_rowid(ctx)
+                fact_guard_report, rewritten_text = svc.evaluate(
                     chapter_text=text or "",
                     sflog_records=records or [],
                     bible_snapshot=bible_snapshot,
                     novel_id=str(getattr(ctx, "novel_id", "") or ""),
-                    chapter_id=int(getattr(ctx, "chapter_id", 0) or 0),
+                    chapter_id=chapter_id or 0,
                 )
                 ctx.metadata["fact_guard_passed"] = fact_guard_report.passed
                 ctx.metadata["fact_guard_forced_pass"] = fact_guard_report.forced_pass
@@ -1472,6 +1531,9 @@ class BaseStoryPipeline(ABC):
                 "records": records,
                 "match_report": match_report,
                 "fact_guard_report": fact_guard_report,
+                "rewritten_chapter_text": (
+                    rewritten_text if rewritten_text is not None else text
+                ),
             }
         except Exception as e:
             logger.warning("[%s] Step 5 hook 失败: %s", ctx.novel_id, e)

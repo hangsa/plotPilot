@@ -1,5 +1,6 @@
 """Chapter API 路由"""
 import logging
+import sqlite3
 from typing import Any, Dict, List, Literal, Optional
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Path
@@ -605,3 +606,21 @@ async def get_chapter_warnings(
         "chapter_id": str(chapter.id),
         "warnings": chapter.warnings or [],
     }
+
+
+def _resolve_chapter_id(novel_id: str, chapter_number: int) -> Optional[int]:
+    """Return the SQLite rowid of `chapters` matching (novel_id, chapter_number).
+
+    None if no such chapter exists. Synchronous DB read; no caching (Phase 2B
+    scope — caching deferred to 2C per Q3).
+
+    Note: ``chapters.id`` is TEXT (a chapter slug like
+    ``chapter-novel-X-chapter-N``), so we project the implicit rowid instead.
+    """
+    with sqlite3.connect(get_db_path()) as conn:
+        cur = conn.execute(
+            "SELECT rowid FROM chapters WHERE novel_id = ? AND number = ? LIMIT 1",
+            (novel_id, chapter_number),
+        )
+        row = cur.fetchone()
+        return row[0] if row else None
