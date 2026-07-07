@@ -1,0 +1,1 @@
+"""Phase 2A domain layer — SF_LOG fact guard value objects."""

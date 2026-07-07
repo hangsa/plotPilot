@@ -1,0 +1,28 @@
+name: SF_LOG rewrite with hints
+category: rewrite
+source: application/sf_log/fact_guard_service.py::FactGuardService::_invoke_sflog_rewrite_with_hints
+description: '基于 fact_guard 命中的 hit context 重写章节中的 SF_LOG 注释块（不改 prose body）'
+builtin: true
+tags:
+- sf_log
+- rewrite
+- fact_guard
+variables:
+- name: chapter_text
+  desc: 原始章节正文（含 SF_LOG 注释）
+  type: string
+  required: true
+- name: hits
+  desc: fact_guard 命中列表（rule_id + message）
+  type: string
+  required: true
+- name: sflog_records
+  desc: 当前抽取的 SF_LOG 记录（JSON 序列化）
+  type: string
+  required: true
+- name: attempt
+  desc: 第几次 attempt（1/2/3）
+  type: integer
+  required: true
+id: sf-log-rewrite-with-hints
+sort_order: 115

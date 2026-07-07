@@ -205,6 +205,18 @@ PlotPilot contains multiple specialized engines, each with a distinct role in th
 实施计划见 `docs/superpowers/plans/2026-07-02-storyos-phase-1d-frontend-api.md` 与 `2026-07-02-storyos-phase-1e-migration.md`
 验收清单见 `docs/superpowers/checklists/2026-07-02-storyos-1d-acceptance.md`
 
+### Phase 2A — Tier 0 SF_LOG Fact Guard (v1.3)
+
+项目 v1.2 之后引入 Tier 0 fact_guard：
+- 12 YAML 驱动规则覆盖所有 11 类 SFLogType（含 1 类全局唯一性）
+- post-write 同步门（嵌在 Step 5 `_hook_step5_post_write_gate` 末尾）
+- 3 attempt 重试 + force-pass；3-attempt 后 HARD 命中落 `chapter.warnings`
+- 新增 `Chapter.warnings` 字段 + `GET /api/v1/chapters/{id}/warnings` 端点
+- 新 CPMS 节点 `sf-log-rewrite-with-hints`（只重写 SF_LOG 块，prose body 不变）
+
+详见 `docs/superpowers/specs/2026-07-07-phase-2a-fact-guard-design.md`
+实施计划见 `docs/superpowers/plans/2026-07-07-phase-2a-fact-guard.md`
+
 ## Environment Variables
 
 Copy `.env.example` to `.env` and configure at minimum one LLM key (`ANTHROPIC_API_KEY` or `ARK_API_KEY`). Key vars: `EMBEDDING_SERVICE` (openai/local), `VECTOR_STORE_TYPE` (chromadb), `LOG_LEVEL`, `LOG_FILE`, `CORS_ORIGINS`, `DISABLE_AUTO_DAEMON`.
