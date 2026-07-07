@@ -18,28 +18,44 @@
 
 **Phase 2A 重定义为**：仅交付 **Tier 0 SF_LOG fact_guard**（post-write 同步门 + 3 attempt + force-pass），输入是 v1.2 现有 11 类 SFLogType，输出 GuardReport。其他 4 块推迟到 Phase 2B/2C。
 
+**对账 v1.2 实际 schema / 管线（影响 spec 主体）**：
+- `domain/storyos/contracts.py` 有 11 类 `SFLogType`；`expected_paid_chapter` 字段不存在
+- `engine/pipeline/base.py:6-15` 显示 10 个 step（+1b governance），Step 5 = `_step_validate_content`（含 `_hook_step5_post_write_gate`），Step 6 = `_step_save_chapter`（含 `_hook_step6_apply_state`）
+- `domain/storyos/value_objects/sf_log.py` 已有 `SFLogRecord` 类型（frozen pydantic）
+- `engine/pipeline/steps/sf_log_extract.py` 不存在；SF_LOG 抽取内嵌在 Step 5 hook
+- `sf-log-rewrite-with-hints` CPMS 节点 v1.2 不存在
+- `domain/novel/entities/chapter.py` 无 `warnings` 字段，新加无冲突
+
 ---
 
 ## 1. 架构
 
-四层 + 一个配置：
+三层 + 一个配置 + 现有管道嵌入：
 
 ```
-engine/pipeline/steps/sf_log_fact_guard.py  ← pipeline hook (Step 5.5, post-write sync)
+config/fact_guard_rules.yaml                              ← 12 rule blocks (NEW)
         │
         ▼
-application/sf_log/fact_guard_service.py     ← service facade (orchestrate 3 attempts)
+application/sf_log/regex_engine.py                        ← loads YAML, evaluates single chapter (NEW)
         │
         ▼
-application/sf_log/regex_engine.py          ← loads config/fact_guard_rules.yaml
+application/sf_log/fact_guard_service.py                  ← orchestrates 3 attempts + force-pass (NEW)
         │
-        ▼  (12 rule blocks)
-config/fact_guard_rules.yaml                  ← 12 rule blocks (1 per SFLogType + 1 registry)
+        ▼
+engine/pipeline/base.py  (_hook_step5_post_write_gate,    ← MODIFY: append fact_guard evaluation
+                          step5 inner block)                after existing parse + match
+        │
+        ▼
+infrastructure/ai/prompt_packages/nodes/sf-log-rewrite-with-hints/  ← NEW CPMS node (LLM retry only changes SF_LOG block)
 ```
+
+**不新建独立的 `engine/pipeline/steps/sf_log_fact_guard.py`**：经过对账（`engine/pipeline/base.py:707-725`），现有 `_step_validate_content` 已包含 `_hook_step5_post_write_gate`，完成了 SF_LOG 解析 + 与 `predeclared_changes` 的 match。fact_guard 在此 hook **末尾追加**（同一 step、同一事务边界内），不新增 step 编号。
 
 **为什么单 YAML regex 引擎而不是 11 handler**：用户选择单点可调优；规则 disable = 注释一行；非正则逻辑走 `python_callable` 逃生口（3 条规则用）。
 
 **为什么 post-write 同步门**：失败可同步重写 SF_LOG 块，3 attempt 后强制 pass，章节不卡。
+
+**为什么嵌入 Step 5 hook 而非独立 step**：维持现有 `_step_validate_content` 失败仅"记录 warning 不阻断"的语义；fact_guard 与原 match_report 同步骤合并报告，避免上下文切换成本（一次 snapshot 复用）。
 
 ---
 
@@ -125,7 +141,7 @@ rules:
 | 5 | `character_emotion.amplitude_cap` | CHARACTER_EMOTION | soft | 单章 emotion_level delta > 2 |
 | 6 | `knowledge_gain.no_omniscience` | KNOWLEDGE_GAIN | hard | 知识赋予方不在 scene.cast 中（python_callable） |
 | 7 | `conflict_escalate.no_repeat` | CONFLICT_ESCALATE | soft | 同 conflict_id 在单章 escalate >1 次 |
-| 8 | `mystery_clue.no_premature_reveal` | MYSTERY_CLUE | hard | mystery_id 在 `expected_paid_chapter` 之前 reveal（python_callable） |
+| 8 | `mystery_clue.no_premature_reveal` | MYSTERY_CLUE | hard | mystery_id 必须引用已创建的 Mystery；reveal 时机窗口检查推到 Phase 2B（v1.2 无 `expected_paid_chapter` 字段；当前可用 `Mystery.created_chapter` + `Clue.discovered_in_chapter`，无 "expected paid" 语义）（python_callable） |
 | 9 | `twist_reveal.no_orphan` | TWIST_REVEAL | hard | twist_id 必须在 foreshadowing/twist registry 存在 |
 | 10 | `expectation_fulfill.scope` | EXPECTATION_FULFILL | soft | expect_id 必须存在且未被双 fulfill |
 | 11 | `goal_milestone.no_skip` | GOAL_MILESTONE | hard | 相邻 milestone 必须有 ≥1 章间隔 |
@@ -158,7 +174,7 @@ attempt 3: run engine(prose_v1, sflog_records_v3)
     append all hits to chapter.warnings (NEW field)
 ```
 
-**关键不变式**：`prose body` 在三次 attempt 中**不变**，只重写 SF_LOG 块。重写 CPMS 节点 = 现有 `sf-log-rewrite-with-hints`（已有 v1.2 节点，加 hit context 输入）。
+**关键不变式**：`prose body` 在三次 attempt 中**不变**，只重写 SF_LOG 块。重写 CPMS 节点 = `sf-log-rewrite-with-hints`（v1.2 不存在，**Phase 2A 新增此节点**，扩展现有 `sf-log-emit` 系列；输入加 hit context 输出 SF_LOG 块修订稿）。
 
 **Chapter 状态变更**：现有 `Chapter` 实体增加 `warnings: list[GuardHit]` 字段（nullable, default=[]）。**注**：v1.2 当前没有 `drift_warnings` 字段——这是本 spec 新引入的字段，作为 fact_guard 输出的载体。新增 `GET /api/v1/chapters/{id}/warnings` 端点（仅读，列表返回 GuardHit 摘要）。
 
@@ -166,55 +182,87 @@ attempt 3: run engine(prose_v1, sflog_records_v3)
 
 ## 6. Pipeline Hook 集成点
 
-**位置**：Step 5.5，插在 `engine/pipeline/steps/sf_log_extract.py` (Step 5) 与 `engine/pipeline/steps/apply_state.py` (Step 6) 之间。
+**位置**：Step 5 `_step_validate_content` 内部的 `_hook_step5_post_write_gate` 方法（`engine/pipeline/base.py:1356`）。在现有 parse + match 决策之后，**追加 fact_guard evaluation**（不在 match_report 前打断，避免破坏现有 Step 5 失败仅 warning 不阻断的语义）。
 
-**Step 5.5 输入/输出**：
+**Step 5 hook 扩展输入/输出**：
 ```python
-def step_sf_log_fact_guard(chapter_draft, sflog_records, bible_snapshot) -> StepResult:
-    report = fact_guard_service.evaluate(
-        FactGuardInput(
-            chapter_id=chapter_draft.id,
-            chapter_text=chapter_draft.body,
-            sflog_records=sflog_records,
-            bible_snapshot=bible_snapshot,
-        )
-    )
-    if not report.passed and not report.forced_pass:
-        # 触发 sf-log-rewrite-with-hints 重写 attempt 2/3
-        sflog_records_v2 = rewrite_sflog_block(sflog_records, report.hits)
-        # 内部循环 3 次，超出 → forced_pass
-    chapter_draft.warnings = report.hits  # 即使 passed=True 也保留 soft hits
-    return StepResult(passed=report.passed, artifacts={"sflog_records": final_records})
+def _hook_step5_post_write_gate(
+    self, ctx: PipelineContext, text: str, predeclared: Any,
+) -> Any:
+    """[PHASE 2A] 末尾追加 fact_guard 调用；先做原有 parse+match（不破坏），再 evaluate。"""
+    delegate = self._get_storyos_delegate(ctx)
+    # ... existing parse + match code unchanged (lines 1370-1390) ...
+
+    # ── PHASE 2A 追加：从 records 抽取 → fact_guard.evaluate ──
+    fact_guard_report = None
+    if records is not None and ctx.chapter_bible_snapshot is not None:
+        for attempt in (1, 2, 3):
+            fact_guard_report = fact_guard_service.evaluate(
+                FactGuardInput(
+                    chapter_id=int(ctx.chapter_number),
+                    chapter_text=text,
+                    sflog_records=records,
+                    bible_snapshot=ctx.chapter_bible_snapshot,
+                )
+            )
+            # 简化版：尝试调用 sf-log-rewrite-with-hints CPMS 节点重写 records
+            if fact_guard_report.passed or fact_guard_report.forced_pass:
+                break
+            rewritten = self._invoke_sflog_rewrite_with_hints(ctx, records, fact_guard_report.hits)
+            if rewritten is not None:
+                records = rewritten
+            else:
+                break  # CPMS 节点不可用，强制 pass 而非 retry
+        # 即使 attempt 1 也保留 SOFT 命中到 chapter.warnings
+        if fact_guard_report:
+            ctx.chapter_draft.warnings = fact_guard_report.hits
+            ctx.metadata["fact_guard_passed"] = fact_guard_report.passed
+            ctx.metadata["fact_guard_forced_pass"] = fact_guard_report.forced_pass
+            ctx.metadata["fact_guard_attempt"] = fact_guard_report.attempt
+
+    return {
+        "format_errors": [],
+        "records": records,
+        "match_report": match_report,
+        "fact_guard_report": fact_guard_report,  # NEW: 合并报告
+    }
 ```
 
-**未通过时的回退**：如果 3 次 attempt 后 forced_pass=true，pipeline **不中断**，Step 6 继续 apply-state。warnings 字段累积给后续章节上下文（影响 ChapterBibleContext 的下一章构造）。
+**未通过时的回退**：如果 3 次 attempt 后 forced_pass=true，pipeline **不中断**，Step 6 继续 apply-state。warnings 字段累积到 `chapter.warnings`（新增字段，详见 §5）。
+
+**CPMS 节点 `sf-log-rewrite-with-hints` 不存在**：v1.2 当前没有这个节点。Phase 2A 新增此节点到 `infrastructure/ai/prompt_packages/nodes/sf-log-rewrite-with-hints/`。如果节点 load 失败（package.yaml 缺失/handler 注册失败）→ 立即 force-pass，不阻塞章节生产。
 
 ---
 
 ## 7. 文件计划
 
+**NEW（11 个）**：
 ```
-config/fact_guard_rules.yaml                              (NEW, 12 rule blocks)
-domain/sf_log/__init__.py                                 (NEW)
-domain/sf_log/guard_report.py                             (NEW: GuardReport, GuardHit, Severity)
-application/sf_log/__init__.py                            (NEW)
-application/sf_log/fact_guard_service.py                  (NEW: orchestrate 3 attempts)
-application/sf_log/regex_engine.py                        (NEW: loads YAML, evaluates single chapter)
-application/sf_log/bible_snapshot.py                      (NEW: ChapterBibleContext read-only)
-application/sf_log/callables/__init__.py                  (NEW: python_callable registry)
-application/sf_log/callables/knowledge_omniscience.py    (NEW: rule 6)
-application/sf_log/callables/location_continuity.py      (NEW: rule 3)
-application/sf_log/callables/mystery_reveal_window.py     (NEW: rule 8)
-engine/pipeline/steps/sf_log_fact_guard.py                (NEW: Step 5.5)
-domain/novel/entities/chapter.py                          (MODIFY: add warnings field)
-interfaces/api/v1/chapters.py                             (MODIFY: GET /chapters/{id}/warnings)
-
-tests/unit/sf_log/test_regex_engine.py                    (NEW: 36 cases, 12 rules × 3)
-tests/unit/sf_log/test_fact_guard_service.py              (NEW: 3-attempt + force-pass)
-tests/integration/sf_log/test_sf_log_fact_guard_hook.py   (NEW: pipeline Step 5.5)
+config/fact_guard_rules.yaml                                          (12 rule blocks)
+domain/sf_log/__init__.py
+domain/sf_log/guard_report.py                                         (GuardReport, GuardHit, Severity)
+application/sf_log/__init__.py
+application/sf_log/fact_guard_service.py                              (orchestrate 3 attempts)
+application/sf_log/regex_engine.py                                    (loads YAML, evaluates single chapter)
+application/sf_log/bible_snapshot.py                                  (ChapterBibleContext read-only)
+application/sf_log/callables/__init__.py                              (python_callable registry)
+application/sf_log/callables/knowledge_omniscience.py                 (rule 6)
+application/sf_log/callables/location_continuity.py                   (rule 3)
+application/sf_log/callables/mystery_reveal_window.py                  (rule 8)
+infrastructure/ai/prompt_packages/nodes/sf-log-rewrite-with-hints/   (NEW CPMS package.yaml + user.md + handler)
+tests/unit/sf_log/test_regex_engine.py                                (36 cases = 12 rules × 3)
+tests/unit/sf_log/test_fact_guard_service.py                          (3-attempt + force-pass)
+tests/integration/sf_log/test_sf_log_fact_guard_hook.py               (Step 5 hook extension)
 ```
 
-**文件总数**：12 个新文件 + 2 个修改 = 14 个变更。
+**MODIFY（3 个）**：
+```
+engine/pipeline/base.py                                               (extend _hook_step5_post_write_gate, append fact_guard)
+domain/novel/entities/chapter.py                                      (add warnings: list[GuardHit] field)
+interfaces/api/v1/chapters.py                                         (add GET /chapters/{id}/warnings)
+```
+
+**文件总数**：14 个新文件 + 3 个修改 = 17 个变更。
 
 ---
 
@@ -272,6 +320,9 @@ tests/integration/sf_log/test_sf_log_fact_guard_hook.py   (NEW: pipeline Step 5.
 | Q6 anti-ai-* 降级 | **推迟到 2B** | 同上 |
 | Q7 PromptGateway | **推迟到 2B/2C** | Tier 0 不需要 LLM 路由 |
 | Q9 前端硬约束 UI | **推迟到 2B** | Phase 2A 仅后端验证链 |
+| 原 spec 假设 `sf-log-rewrite-with-hints` CPMS 节点存在 | **实际不存在；Phase 2A 新增此节点** | 对账 v1.2 后确认（v1.2 pipeline 仅有 `_hook_step5_post_write_gate` 的 match 决策，无 LLM rewrite 路径） |
+| 原 spec 假设 Step 5 = sf_log_extract / Step 6 = apply_state | **实际 Step 5 = `_step_validate_content`（含 post-write gate），Step 6 = `_step_save_chapter`（含 apply-state hook）** | 对账 `engine/pipeline/base.py:6-15`；fact_guard 嵌入 Step 5 hook 末尾，不新增 step |
+| rule 8 mystery_clue 校验 `expected_paid_chapter` | **改为只校验 mystery_id 引用合法** | v1.2 无 `expected_paid_chapter` 字段（Foreshadowing 仅有 `suggested_resolve_chapter`，Mystery 仅有 `discovered_in_chapter`）；reveal 时机窗口推到 2B |
 
 原 spec `2026-07-07-prompt-fusion-design.md` Phase 2A 段（§4.1）由本 spec 替换。Phase 2B/2C 仍按原 spec 节奏。
 
@@ -281,8 +332,10 @@ tests/integration/sf_log/test_sf_log_fact_guard_hook.py   (NEW: pipeline Step 5.
 
 - `character.taboos`：重命名 `moral_taboos` + 加 `unknown_to_character`
 - `worldbuilding.power_system`：加嵌套 `PowerSystem { name, stages, cost_system, ceilings }` 与现有字符串并存
-- `PromptGateway`：4-Tier 模型路由
-- 6 个 anti-ai-* 节点降级到 T2
-- 前端硬约束违反 UI
+- `PromptGateway`：4-Tier 模型路由（Tier 0/Tier 1/Tier 2/Tier 3）
+- 6 个 anti-ai-* 节点降级到 T2（事实层→风格层）
+- 前端硬约束违反 UI（消费 `chapter.warnings` 端点）
+- **prose-level rewrite**：Phase 2A 重写只改 SF_LOG 块，不动 prose body；若 prose 与 SF_LOG 矛盾（如 prose 说 A 在北京、SF_LOG 说 A 在上海），Phase 2A 走 forced_pass。Phase 2B 引入 prose-level rewrite（一次 LLM 改 prose 对齐 SF_LOG）；调用点 = sf-log-rewrite-with-hints 节点扩展接受 "target=prose" 标记
+- `mystery_clue.no_premature_reveal` reveal 时机窗口（v1.2 当前无 `expected_paid_chapter` 字段，2B 先引入字段再做严格检查）
 
 每个都是独立 sub-spec，按 2A 节奏（4 周）继续。
