@@ -1379,10 +1379,66 @@ class BaseStoryPipeline(ABC):
                 )
                 return {"format_errors": format_errors, "records": records}
             match_report = delegate.parser_service.match_against_predeclared(records, predeclared)
+            # ── PHASE 2A 追加：fact_guard evaluation (12 rules, 3-attempt + force-pass) ──
+            fact_guard_report = None
+            try:
+                from application.sf_log.fact_guard_service import FactGuardService
+                from application.sf_log.regex_engine import RegexEngine
+                from application.sf_log.bible_snapshot import ChapterBibleContext
+
+                engine = RegexEngine.from_yaml("config/fact_guard_rules.yaml")
+
+                def _cpms_invoker(records, hits, attempt):  # noqa: ANN001
+                    # Phase 2A: CPMS invoke via prose_composer-equivalent path.
+                    # Stub for now: real wiring is in writing_orchestrator integration.
+                    return None  # → service treats as CPMS unavailable → force-pass
+
+                bible_snapshot = getattr(ctx, "chapter_bible_snapshot", None)
+                if bible_snapshot is None:
+                    # Construct minimal from ctx.scene_plan.cast if available
+                    cast = getattr(
+                        getattr(ctx, "scene_plan", None), "cast", None,
+                    ) or set()
+                    bible_snapshot = ChapterBibleContext(
+                        chapter_id=int(ctx.chapter_number or 0),
+                        scene_cast_ids=frozenset(cast),
+                        characters=(),
+                        worldbuilding_links={},
+                    )
+
+                svc = FactGuardService(engine=engine, cpms_invoker=_cpms_invoker)
+                fact_guard_report = svc.evaluate(
+                    chapter_text=text or "",
+                    sflog_records=records or [],
+                    bible_snapshot=bible_snapshot,
+                )
+                ctx.metadata["fact_guard_passed"] = fact_guard_report.passed
+                ctx.metadata["fact_guard_forced_pass"] = fact_guard_report.forced_pass
+                ctx.metadata["fact_guard_attempt"] = fact_guard_report.attempt
+                if fact_guard_report.hits:
+                    ctx.metadata.setdefault("storyos_warnings", []).extend(
+                        [
+                            {
+                                "rule_id": h.rule_id,
+                                "sflog_id": h.sflog_id,
+                                "severity": h.severity.value,
+                                "message": h.message,
+                            }
+                            for h in fact_guard_report.hits
+                        ]
+                    )
+            except Exception as e:  # noqa: BLE001 — fact_guard must not crash pipeline
+                logger.warning(
+                    "[%s] fact_guard 评估异常（已降级）: %s",
+                    getattr(ctx, "novel_id", "?"), e,
+                )
+                ctx.storyos_failed.append(f"fact_guard: {e}")
+
             return {
-                "format_errors": [],
+                "format_errors": format_errors,
                 "records": records,
                 "match_report": match_report,
+                "fact_guard_report": fact_guard_report,
             }
         except Exception as e:
             logger.warning("[%s] Step 5 hook 失败: %s", ctx.novel_id, e)
