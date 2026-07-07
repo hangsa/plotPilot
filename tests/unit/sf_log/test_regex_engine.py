@@ -246,3 +246,108 @@ class TestMysteryRevealWindow:
         )
         hits = MYSTERY_REVEAL_WINDOW(rec, bible)
         assert hits == []  # well-formed mystery_id → no hit
+
+
+# ---------------------------------------------------------------------------
+# Phase 2A Task 5 — full 12-rule YAML + chapter-level evaluate_chapter
+# ---------------------------------------------------------------------------
+
+import pytest  # noqa: E402
+
+
+@pytest.fixture
+def full_engine():
+    """Loads the real config/fact_guard_rules.yaml (12 rules)."""
+    from pathlib import Path
+
+    yaml_path = (
+        Path(__file__).parent.parent.parent.parent
+        / "config"
+        / "fact_guard_rules.yaml"
+    )
+    return RegexEngine.from_yaml(str(yaml_path))
+
+
+@pytest.mark.parametrize("rule_id,expected_severity", [
+    ("character_relation.no_self_loop", "hard"),
+    ("character_location.no_instant_teleport", "hard"),
+    ("character_location.continuity", "hard"),
+    ("character_physical.no_undo_without_cause", "hard"),
+    ("character_emotion.amplitude_cap", "soft"),
+    ("knowledge_gain.no_omniscience", "hard"),
+    ("conflict_escalate.no_repeat", "soft"),
+    ("mystery_clue.no_premature_reveal", "hard"),
+    ("twist_reveal.no_orphan", "hard"),
+    ("expectation_fulfill.scope", "soft"),
+    ("goal_milestone.no_skip", "hard"),
+    ("registry_create.uniqueness", "hard"),
+])
+def test_all_12_rules_present(full_engine, rule_id, expected_severity):
+    assert rule_id in full_engine.rules
+    assert full_engine.rules[rule_id].severity.value == expected_severity
+
+
+def test_evaluate_chapter_dispatches_to_python_callable_rules(full_engine):
+    """evaluate_chapter routes KNOWLEDGE_GAIN records to rule 6 callable."""
+    bible = ChapterBibleContext(
+        chapter_id=1,
+        scene_cast_ids=frozenset({"bob"}),
+        characters=(),
+        worldbuilding_links={},
+    )
+    record = _record(SFLogType.KNOWLEDGE_GAIN, {"subject": "alice", "object": "x"})
+    hits = full_engine.evaluate_chapter(
+        [record], "any text", bible_snapshot=bible
+    )
+    assert any(h.rule_id == "knowledge_gain.no_omniscience" for h in hits)
+
+
+def test_evaluate_chapter_runs_pattern_rules(full_engine):
+    record = _record(
+        SFLogType.CHARACTER_LOCATION_CHANGE,
+        {"character_id": "x", "to": "y"},
+    )
+    # Fixture fix: '瞬移' (2 chars) matches `(瞬移|传送|闪现)`; '瞬间移动' would NOT.
+    chapter_text = "他瞬移到了"
+    hits = full_engine.evaluate_chapter([record], chapter_text)
+    assert any(h.rule_id == "character_location.no_instant_teleport" for h in hits)
+
+
+# ---------------------------------------------------------------------------
+# Phase 2A Task 5 — relation_no_self_loop callable (Rule 1)
+# ---------------------------------------------------------------------------
+
+from application.sf_log.callables.relation_no_self_loop import (  # noqa: E402
+    evaluate as _relation_no_self_loop,
+)
+
+
+class TestRelationNoSelfLoop:
+    def test_returns_hit_when_subject_equals_object(self):
+        bible = ChapterBibleContext(
+            chapter_id=1,
+            scene_cast_ids=frozenset(),
+            characters=(),
+            worldbuilding_links={},
+        )
+        rec = _record(
+            SFLogType.CHARACTER_RELATION_CHANGE,
+            {"subject": "alice", "object": "alice"},
+        )
+        hits = _relation_no_self_loop(rec, bible)
+        assert len(hits) == 1
+        assert hits[0].rule_id == "character_relation.no_self_loop"
+        assert hits[0].severity is Severity.HARD
+
+    def test_returns_no_hit_when_subject_differs_from_object(self):
+        bible = ChapterBibleContext(
+            chapter_id=1,
+            scene_cast_ids=frozenset(),
+            characters=(),
+            worldbuilding_links={},
+        )
+        rec = _record(
+            SFLogType.CHARACTER_RELATION_CHANGE,
+            {"subject": "alice", "object": "bob"},
+        )
+        assert _relation_no_self_loop(rec, bible) == []

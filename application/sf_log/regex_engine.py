@@ -119,6 +119,39 @@ class RegexEngine:
                 hits.extend(callable_fn(record, bible_snapshot))
         return hits
 
+    def evaluate_chapter(
+        self,
+        records: List[SFLogRecord],
+        chapter_text: str,
+        bible_snapshot: Optional[ChapterBibleContext] = None,
+    ) -> List[GuardHit]:
+        """Evaluate all records in a chapter; aggregate hits.
+
+        Phase 2A Task 5 — dispatches per-record rules via `evaluate_record`,
+        then runs multi-record python_callable rules (currently only
+        `location_continuity`) once across the whole record batch.
+        """
+        hits: List[GuardHit] = []
+        for rec in records:
+            hits.extend(self.evaluate_record(rec, chapter_text, bible_snapshot))
+        # Also dispatch multi-record python_callables (currently only rule 3)
+        location_continuity_rule = None
+        for rule in self.rules.values():
+            if (
+                rule.python_callable
+                == "application.sf_log.callables.location_continuity.evaluate"
+                and bible_snapshot is not None
+            ):
+                location_continuity_rule = rule
+                break
+        if location_continuity_rule is not None:
+            callable_fn = resolve_callable(
+                location_continuity_rule.python_callable  # type: ignore[arg-type]
+            )
+            if callable_fn is not None:
+                hits.extend(callable_fn(records, bible_snapshot))
+        return hits
+
     def _hit_from_match(
         self,
         rule: EngineRule,

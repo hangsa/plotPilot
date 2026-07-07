@@ -13,6 +13,7 @@ from application.sf_log.bible_snapshot import ChapterBibleContext
 from application.sf_log.callables.knowledge_omniscience import evaluate as _knowledge_eval  # noqa: F401
 from application.sf_log.callables.location_continuity import evaluate as _location_eval  # noqa: F401
 from application.sf_log.callables.mystery_reveal_window import evaluate as _mystery_eval  # noqa: F401
+from application.sf_log.callables.relation_no_self_loop import evaluate as _relation_eval  # noqa: F401
 from domain.sf_log.guard_report import GuardHit, Severity
 
 
@@ -20,10 +21,12 @@ from domain.sf_log.guard_report import GuardHit, Severity
 KNOWLEDGE_OMNISCIENCE = _knowledge_eval
 LOCATION_CONTINUITY = _location_eval
 MYSTERY_REVEAL_WINDOW = _mystery_eval
+RELATION_NO_SELF_LOOP = _relation_eval
 
 
 # Registry: python_callable string → callable
 _CALLABLE_REGISTRY = {
+    "application.sf_log.callables.relation_no_self_loop.evaluate": _relation_eval,
     "application.sf_log.callables.knowledge_omniscience.evaluate": _knowledge_eval,
     "application.sf_log.callables.location_continuity.evaluate": _location_eval,
     "application.sf_log.callables.mystery_reveal_window.evaluate": _mystery_eval,

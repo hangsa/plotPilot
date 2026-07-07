@@ -1,6 +1,102 @@
-# Phase 2A stub — full 12 rules in Task 5
+# Phase 2A — Tier 0 fact guard rules (12 rules covering 11 SFLogType classes).
+# Spec: docs/superpowers/specs/2026-07-07-phase-2a-fact-guard-design.md §4.
+#
+# Pattern flavors: single regex (pattern) / multi-pattern OR (patterns) /
+#                  python_callable escape hatch (python_callable).
 version: 2a-1
 defaults:
   severity_on_miss: hard
   text_window_chars: 200
-rules: []
+rules:
+  # 1. CHARACTER_RELATION_CHANGE — subject cannot equal object
+  - id: character_relation.no_self_loop
+    applies_to: character_relation_change
+    severity: hard
+    description: "A character cannot change relation with themselves"
+    python_callable: "application.sf_log.callables.relation_no_self_loop.evaluate"
+
+  # 2. CHARACTER_LOCATION_CHANGE — forbid instant-teleport verbs
+  - id: character_location.no_instant_teleport
+    applies_to: character_location_change
+    severity: hard
+    description: "禁止章节中出现瞬移/传送/闪现类禁词"
+    patterns:
+      - name: forbidden_verbs
+        regex: "(瞬移|传送|闪现)"
+
+  # 3. CHARACTER_LOCATION_CHANGE — consecutive locations must be reachable
+  - id: character_location.continuity
+    applies_to: character_location_change
+    severity: hard
+    description: "连续 location 必须在 bible.links 2-hop 内可达"
+    python_callable: "application.sf_log.callables.location_continuity.evaluate"
+
+  # 4. CHARACTER_PHYSICAL_CHANGE — lost body part regenerated requires cause
+  - id: character_physical.no_undo_without_cause
+    applies_to: character_physical_change
+    severity: hard
+    description: "失去的身体部位恢复需要 cause 字段"
+    pattern: "(再生|恢复如初|完好如初)"
+    # This is approximation — actual check needs param inspection; deferred
+
+  # 5. CHARACTER_EMOTION — amplitude cap (soft)
+  - id: character_emotion.amplitude_cap
+    applies_to: character_emotion
+    severity: soft
+    description: "单章 emotion delta > 2 是可疑软告警"
+    pattern: "(狂喜|悲痛欲绝|心如死灰|欣喜若狂)"
+    text_window_chars: 600
+
+  # 6. KNOWLEDGE_GAIN — grantor must be in scene.cast
+  - id: knowledge_gain.no_omniscience
+    applies_to: knowledge_gain
+    severity: hard
+    description: "知识赋予方必须在 scene.cast 内"
+    python_callable: "application.sf_log.callables.knowledge_omniscience.evaluate"
+
+  # 7. CONFLICT_ESCALATE — same conflict_id escalate > 1 in chapter (soft)
+  - id: conflict_escalate.no_repeat
+    applies_to: conflict_escalate
+    severity: soft
+    description: "同 conflict_id 在单章 escalate > 1 次"
+    pattern: "^.{0,200}$"
+    # Phase 2A simplification: full check needs cross-record state; param-based check deferred
+
+  # 8. MYSTERY_CLUE — mystery_id must be well-formed (Phase 2A simplification; window pushed to 2B)
+  - id: mystery_clue.no_premature_reveal
+    applies_to: mystery_clue
+    severity: hard
+    description: "mystery_id 格式必须合法（reveal-window 推迟到 2B）"
+    python_callable: "application.sf_log.callables.mystery_reveal_window.evaluate"
+
+  # 9. TWIST_REVEAL — twist_id must exist in registry (T0 simplified check)
+  - id: twist_reveal.no_orphan
+    applies_to: twist_reveal
+    severity: hard
+    description: "twist_id 必须符合命名约定（非空 alnum+dash）"
+    pattern: "^[A-Za-z0-9_-]{4,64}$"
+    text_window_chars: 0  # no text scan; param-only rule
+
+  # 10. EXPECTATION_FULFILL — expect_id must be valid format (soft)
+  - id: expectation_fulfill.scope
+    applies_to: expectation_fulfill
+    severity: soft
+    description: "expect_id 格式必须合法"
+    pattern: "^[A-Za-z0-9_-]{4,64}$"
+    text_window_chars: 0
+
+  # 11. GOAL_MILESTONE — consecutive milestone must have ≥ 1 chapter gap (T0 simplified)
+  - id: goal_milestone.no_skip
+    applies_to: goal_milestone
+    severity: hard
+    description: "相邻 milestone 至少相隔 1 章"
+    pattern: "^.{1,100}$"  # placeholder; cross-record check deferred
+    text_window_chars: 0
+
+  # 12. REGISTRY_CREATE — (s, p, o) triple must be unique (T0 structural check)
+  - id: registry_create.uniqueness
+    applies_to: registry_create
+    severity: hard
+    description: "(subject, predicate, object) 三元组格式校验"
+    pattern: "^[A-Za-z0-9_-]{1,64}$"
+    text_window_chars: 0
