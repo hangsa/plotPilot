@@ -1,0 +1,1 @@
+"""Phase 2A application layer — fact_guard service orchestration."""
