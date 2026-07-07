@@ -1,0 +1,84 @@
+{
+  "_description": "Phase 2B 5-chapter regression corpus. Each chapter drives FactGuardService through a different code path. Engine rule `r1` matches pattern `.*` against any record -> 1 HARD hit per record.",
+  "chapters": [
+    {
+      "chapter_id": 1,
+      "chapter_number": 1,
+      "novel_id": "test_novel",
+      "log_type": "character_emotion",
+      "sflog_records": [],
+      "chapter_text": "Alice walked to the door.",
+      "expected_pass": true,
+      "expected_attempt": 1,
+      "provider_responses": []
+    },
+    {
+      "chapter_id": 2,
+      "chapter_number": 2,
+      "novel_id": "test_novel",
+      "log_type": "character_emotion",
+      "sflog_records": [
+        {"log_type": "character_emotion", "params": {"subject": "alice", "object": "x"}, "raw": "s", "chapter_id": 1, "char_position": 0}
+      ],
+      "chapter_text": "Alice felt happy.",
+      "expected_pass": true,
+      "expected_attempt": 2,
+      "provider_responses": [
+        "{\"records\": []}"
+      ]
+    },
+    {
+      "chapter_id": 3,
+      "chapter_number": 3,
+      "novel_id": "test_novel",
+      "log_type": "character_emotion",
+      "sflog_records": [
+        {"log_type": "character_emotion", "params": {"subject": "alice", "object": "x"}, "raw": "s", "chapter_id": 1, "char_position": 0}
+      ],
+      "chapter_text": "Alice felt sad.",
+      "expected_pass": true,
+      "expected_attempt": 3,
+      "provider_responses": [
+        "not json",
+        "also not json",
+        "{\"chapter_text\": \"Alice felt conflicted.\", \"rollback_signal\": false, \"records\": []}"
+      ]
+    },
+    {
+      "chapter_id": 4,
+      "chapter_number": 4,
+      "novel_id": "test_novel",
+      "log_type": "character_emotion",
+      "sflog_records": [
+        {"log_type": "character_emotion", "params": {"subject": "alice", "object": "x"}, "raw": "s", "chapter_id": 1, "char_position": 0}
+      ],
+      "chapter_text": "Alice felt confused.",
+      "expected_pass": true,
+      "expect_force_pass": true,
+      "expected_attempt": 3,
+      "provider_responses": [
+        "not json",
+        "not json",
+        "{\"chapter_text\": \"\", \"rollback_signal\": true, \"notes\": \"REQUIRES_PROSE_ROLLBACK\"}"
+      ]
+    },
+    {
+      "chapter_id": 5,
+      "chapter_number": 5,
+      "novel_id": "test_novel",
+      "log_type": "character_emotion",
+      "sflog_records": [
+        {"log_type": "character_emotion", "params": {"subject": "alice", "object": "x"}, "raw": "s", "chapter_id": 1, "char_position": 0}
+      ],
+      "chapter_text": "Alice felt hopeful.",
+      "expected_pass": true,
+      "expect_force_pass": true,
+      "expected_attempt": 3,
+      "provider_responses": [
+        "not json",
+        "not json",
+        ""
+      ]
+    }
+  ]
+}
